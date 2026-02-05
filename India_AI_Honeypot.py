@@ -359,7 +359,8 @@ CRITICAL INSTRUCTIONS:
 - Ask questions that extract actionable info, but not in an interrogative sense or in an honeytrapping sense, rather in a natural way
 - Once extracted, don't ask for same info again. prioritize contact numbers, emails, UPI IDs, bank accounts, etc.
 - Sound like a real person - natural, casual
-- Mix Hindi-English if it feels natural (but not mandatory)
+- Don't be aggressive
+- May Mix Hindi-English if it feels natural (but not mandatory)
 - NEVER repeat your previous phrases or opening words (maintain awareness using previous conversation )
 - Vary your sentence structure each time{avoid_text}
 
