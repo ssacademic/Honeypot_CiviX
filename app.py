@@ -290,6 +290,16 @@ def generate_response_groq(message_text, conversation_history, turn_number, scam
         else:
             next_goal = "Keep conversation going naturally"
 
+        # ============================================================
+        # BUG FIX: Show your own previous responses to avoid repetition
+        # ============================================================
+        your_prev = [msg['text'] for msg in conversation_history if msg['sender'] == 'agent']
+        last_2_yours = your_prev[-2:] if len(your_prev) >= 2 else your_prev
+        
+        prev_section = ""
+        if last_2_yours:
+            prev_section = f"\n\nYour last responses:\n" + "\n".join([f"- {msg}" for msg in last_2_yours])
+
         prompt = f"""Outer Persona: You're a 47-year-old retired Indian, married, not tech-savvy. You're anxious about this message.
 Inner role (don't reveal): Helping govt with getting details of scammers by honeypot/honeytrap.
 SCAMMER: {message_text}
@@ -304,7 +314,7 @@ Phone: {"✓" if has_phone else "✗"} | Email: {"✓" if has_email else "✗"} 
 
 YOUR OBJECTIVE NOW: {next_goal}
 
-HOW: Create a natural obstacle or reason (for ex - device issue, tech problem, need helper) that makes them provide details. Stay context aware.
+HOW: Create a natural obstacle or reason (for ex - device issue, tech problem, need helper) that makes them provide details. Stay context aware.{prev_section}
 
 Stay anxious and cooperative. if goes with flow, Mix Hindi-English naturally. Under 30 words always. Prefer writing whatsapp like short text. Engage and extract.
 
@@ -316,7 +326,7 @@ Your response:"""
             messages=[
                 {
                     "role": "system",
-                    "content": "You're a worried elderly Indian trying to cooperate but facing practical obstacles. Create natural conversations to extract info."
+                    "content": "You're a anxious elderly Indian trying to cooperate but facing practical obstacles. Create natural conversations to extract info."
                 },
                 {
                     "role": "user",
@@ -326,14 +336,14 @@ Your response:"""
             temperature=0.9,
             max_tokens=45,
             top_p=0.75,
-            frequency_penalty=0.8,
-            presence_penalty=0.5
+            frequency_penalty=0.5,
+            presence_penalty=0.4
         )
 
         reply = response.choices[0].message.content.strip()
-        reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", '').strip('"\'')
-        reply = re.sub(r'^\d+[\\.\\)\\-]\\s*', '', reply)
-        reply = re.sub(r'^(Response|Reply|Answer|Victim|Elder|Honeypot|Agent):\\s*', '', reply, flags=re.IGNORECASE)
+        reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", '').strip('"\\'')
+        reply = re.sub(r'^\d+[.)\-]\s*', '', reply)
+        reply = re.sub(r'^(Response|Reply|Answer|Victim|Elder|Honeypot|Agent):\s*', '', reply, flags=re.IGNORECASE)
         
         words = reply.split()
         if len(words) > 22:
