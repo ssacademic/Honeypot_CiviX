@@ -16,52 +16,35 @@ import re
 import requests
 from datetime import datetime
 from flask import Flask, request, jsonify
-from pyngrok import ngrok
+
 from groq import Groq
 
-from google.colab import userdata
+
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
 # Groq API Configuration (30 RPM = 1,800 requests/hour!)
-GROQ_API_KEY = userdata.get('GROQ_API_KEY')  # From Colab Secrets
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 
-# ngrok Configuration
-NGROK_AUTH_TOKEN = userdata.get('NGROK')
+
+
 
 # API Security
-API_SECRET_KEY = "honeypot_secret_2026"
+API_SECRET_KEY = os.environ.get('API_SECRET_KEY', 'honeypot_secret_2026')
 
 # GUVI Callback Endpoint
-GUVI_CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+GUVI_CALLBACK_URL = os.environ.get('GUVI_CALLBACK_URL', 'https://hackathon.guvi.in/api/updateHoneyPotFinalResult')
+
 
 # ============================================================
 # INITIALIZE SERVICES
 # ============================================================
 
-# Test Groq connection
-print("🤖 Testing Groq API...")
-try:
-    client = Groq(api_key=GROQ_API_KEY)
-    test_response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",  # Fastest model
-        messages=[{"role": "user", "content": "Say 'API Connected'"}],
-        max_tokens=10
-    )
-    print(f"✅ Groq API: {test_response.choices[0].message.content}\n")
-except Exception as e:
-    print(f"❌ Groq API Error: {e}")
-    print("⚠️  Check your API key in Colab Secrets!\n")
 
-# Configure ngrok
-print("🌐 Configuring ngrok...")
-try:
-    ngrok.set_auth_token(NGROK_AUTH_TOKEN)
-    print("✅ ngrok authenticated\n")
-except Exception as e:
-    print(f"❌ ngrok Error: {e}\n")
+
+
 
 # Initialize Flask app
 app = Flask(__name__)
