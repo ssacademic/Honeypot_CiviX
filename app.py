@@ -260,76 +260,142 @@ def detect_language(message):
 # ============================================================
 
 def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en"):
-    """Intelligent conversational agent"""
+    """Enhanced with guardrails and tactics - DEBUGGED"""
     try:
         # Full context
         full_history = ""
         if conversation_history:
             full_history = "\n".join([f"{msg['sender']}: {msg['text']}" for msg in conversation_history])
         
-        # What have we collected? (ALL important fields)
+        # What collected? (FIXED UPI detection)
         full_convo = " ".join([msg['text'] for msg in conversation_history])
         
         contacts_found = []
-        if re.search(r'\b[6-9]\d{9}\b', full_convo):
-            contacts_found.append("phone number")
-        if re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
+        has_phone = bool(re.search(r'\b[6-9]\d{9}\b', full_convo))
+        has_email = bool(re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo))
+        has_upi = bool(re.search(r'@[a-zA-Z0-9_-]+\b', full_convo)) and not has_email  # ✅ FIXED
+        has_account = bool(re.search(r'\b\d{11,18}\b', full_convo))
+        has_link = bool(re.search(r'https?://', full_convo))
+        
+        if has_phone:
+            contacts_found.append("phone")
+        if has_email:
             contacts_found.append("email")
-        if re.search(r'@[a-zA-Z0-9_-]+\b', full_convo) and not re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
-            contacts_found.append("UPI/payment ID")
-        if re.search(r'\b\d{11,18}\b', full_convo):  # ✅ ADDED ACCOUNT!
-            contacts_found.append("bank account")
-        if re.search(r'https?://', full_convo):
+        if has_upi:
+            contacts_found.append("UPI/payment")
+        if has_account:
+            contacts_found.append("account")
+        if has_link:
             contacts_found.append("link")
         
-        status = f"Extracted: {', '.join(contacts_found) if contacts_found else 'nothing yet'}"
+        missing = 5 - len(contacts_found)
+        urgency = "HIGH - need more info!" if missing >= 3 else "moderate"
+        
+        # Check your recent responses
+        your_msgs = [msg['text'] for msg in conversation_history if msg['sender'] == 'agent']
+        recent_yours = your_msgs[-3:] if len(your_msgs) >= 3 else your_msgs
+        
+        # Build tactics reminder
+        tactics_used = set()
+        for msg in recent_yours:
+            msg_lower = msg.lower()
+            if 'battery' in msg_lower or 'charge' in msg_lower:
+                tactics_used.add("battery")
+            if 'phone' in msg_lower or 'call' in msg_lower:
+                tactics_used.add("phone")
+            if 'email' in msg_lower:
+                tactics_used.add("email")
+            if 'network' in msg_lower:
+                tactics_used.add("network")
+            if 'wife' in msg_lower or 'beta' in msg_lower or 'brother' in msg_lower:
+                tactics_used.add("helper")
+        
+        tactics_note = ""
+        if tactics_used:
+            tactics_note = f"\n\nTACTICS ALREADY USED: {', '.join(tactics_used)}\n→ Use DIFFERENT tactics now!"
 
-        # Simple, intelligent prompt
-        prompt = f"""You're roleplaying as a 47-year-old retired Indian man. A scammer is messaging you about your bank account.
+        prompt = f"""You're a 47-year-old retired Indian man. Scammer messaging about bank account.
 
-FULL CONVERSATION:
+CONVERSATION:
 {full_history}
 Scammer: {message_text}
 
-Turn {turn_number}/8 | {status}
+TURN {turn_number}/8 | Extracted: {', '.join(contacts_found) if contacts_found else 'nothing'} | Missing: {missing} | Urgency: {urgency}
 
-Your hidden goal (don't reveal): Extract their contact details (phone, email, UPI, bank account, links) by acting like an anxious, non-tech-savvy victim who wants to cooperate but faces practical obstacles or situations. Check status and pursue info (not linearly aggressively, but using your persona to tactfully skillfully draw or extract; if nothing, plainly ask)
+MISSION: Extract their contacts (phone/email/UPI/account/link) via natural obstacles.
 
-Respond naturally as this character would. Keep brief (under 25 words). Mix Hindi-English if natural or fit to context.
+YOUR RECENT RESPONSES:
+{chr(10).join(['- ' + msg for msg in recent_yours]) if recent_yours else '(none)'}
 
-Your response:"""
+EXTRACTION TACTICS LIBRARY (pick different one each turn):
+1. Device death: "Battery/phone dying, [alternative method]?"
+2. Network issue: "Network problem, email/call instead?"
+3. Helper needed: "Wife/brother will help, need your details"
+4. Alt platform: "Phone issue, WhatsApp/UPI ID?"
+5. Verification: "Office address/link to verify?"
+6. Additional info: "Password bhi chahiye?", "Aadhar card?"
+7. Confusion pivot: "Email wrong format? Your correct one?"
+8. Physical visit: "Branch visit, address kahan hai?"{tactics_note}
+
+STRICT RULES:
+❌ NEVER use: "I don't understand", "Can you explain", "Be more clear", "I'm confused", "What is this", "This doesn't make sense"
+✅ ALWAYS: Create specific obstacle/request with natural reason
+✅ VARY: Use different tactic than last 3 responses
+✅ BRIEF: Under 20 words, WhatsApp style
+✅ NATURAL: Mix Hindi-English if fits
+
+Your creative response:"""
 
         client = Groq(api_key=GROQ_API_KEY)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are playing a character naturally. Be contextually aware, intelligent, and conversational - like a real person. Don't repeat yourself. Understand context and respond appropriately."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.85,
-            max_tokens=50,
-            top_p=0.85,
-            frequency_penalty=0.7,
-            presence_penalty=0.5
-        )
-
-        reply = response.choices[0].message.content.strip()
-        reply = reply.replace('**', '').replace('*', '')
         
+        # Try generation up to 2 times if generic detected
+        for attempt in range(2):
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Play character naturally. Be creative and specific. NEVER use generic confusion phrases. Always create concrete obstacles with specific asks."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.82,
+                max_tokens=50,
+                top_p=0.80,
+                frequency_penalty=0.75,
+                presence_penalty=0.55
+            )
+
+            reply = response.choices[0].message.content.strip()
+            reply = reply.replace('**', '').replace('*', '')
+            
+            # GUARDRAIL: Detect generic fallbacks
+            generic_phrases = [
+                "don't understand", "can you explain", "be more clear", 
+                "i'm confused", "what is this", "doesn't make sense",
+                "kya hai yeh", "samajh nahi", "wait, what"
+            ]
+            
+            is_generic = any(phrase in reply.lower() for phrase in generic_phrases)
+            
+            if not is_generic or attempt == 1:
+                # Good response or final attempt
+                break
+            # else: retry with same prompt
+
         words = reply.split()
-        if len(words) > 25:
-            reply = ' '.join(words[:25])
+        if len(words) > 22:
+            reply = ' '.join(words[:22])
 
         return reply
 
     except Exception as e:
-        return "Arre baba, I'm confused. What should I do?"
+        print(f"⚠️ Groq error: {e}")
+        return "Arre baba, phone problem. Aapka number kya hai?"
+
 
 
 
