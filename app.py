@@ -253,28 +253,6 @@ def detect_language(message):
         return "hi"
     return "en"
 
-def get_engagement_strategy(turn_number, confidence, entities_count):
-    """4-stage adaptive engagement strategy"""
-    if turn_number <= 2:
-        return {
-            "strategy": "naive",
-            "tone": "Show confusion and concern. Sound worried.",
-        }
-    elif turn_number <= 4:
-        return {
-            "strategy": "questioning",
-            "tone": "Ask for specific details. Sound cautious but cooperative.",
-        }
-    elif turn_number <= 6 or entities_count < 2:
-        return {
-            "strategy": "skeptical",
-            "tone": "Express mild doubt. Mention family or bank verification.",
-        }
-    else:
-        return {
-            "strategy": "defensive",
-            "tone": "Politely resistant. Suggest in-person verification.",
-        }
 
 
 # ============================================================
@@ -282,107 +260,90 @@ def get_engagement_strategy(turn_number, confidence, entities_count):
 # ============================================================
 
 def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en"):
-    """Reasoning-based response - let LLM think naturally"""
+    """Pure objective-focused response"""
     try:
         persona = PERSONAS[language]
         
         # Build history
         history_text = ""
         if conversation_history:
-            recent = conversation_history[-6:]
+            recent = conversation_history[-4:]
             history_text = "\n".join([f"{msg['sender']}: {msg['text']}" for msg in recent])
+
+        # What do we have?
+        full_convo = message_text + " " + " ".join([msg['text'] for msg in conversation_history])
+        
+        has_phone = bool(re.search(r'\b[6-9]\d{9}\b', full_convo))
+        has_email = bool(re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo))
+        has_upi = bool(re.search(r'@[a-zA-Z0-9_-]+\b', full_convo)) and not has_email
+        has_account = bool(re.search(r'\b\d{11,18}\b', full_convo))
+        
+        # What's our next target?
+        if not has_phone:
+            next_goal = "Get their phone number"
+        elif not has_email:
+            next_goal = "Get their email address"
+        elif not has_upi:
+            next_goal = "Get their UPI ID"
+        elif not has_account:
+            next_goal = "Get their account number"
         else:
-            history_text = "(First message)"
+            next_goal = "Keep conversation going naturally"
 
-        # What have we extracted?
-        full_conversation = message_text + " " + " ".join([msg['text'] for msg in conversation_history])
-        
-        has_phone = bool(re.search(r'\b[6-9]\d{9}\b', full_conversation))
-        has_email = bool(re.search(r'@[a-zA-Z0-9.-]+\.', full_conversation))
-        has_upi = bool(re.search(r'[a-zA-Z0-9._-]+@[a-zA-Z0-9_-]+', full_conversation)) and not has_email
-        has_account = bool(re.search(r'\b\d{11,18}\b', full_conversation))
-        
-        # What did I just say?
-        my_last_3 = [msg['text'] for msg in conversation_history if msg['sender'] == 'agent'][-3:]
+        prompt = f"""Outer Persona: You're a 47-year-old retired Indian, married, not tech-savvy. You're anxious about this message.
+Inner role (don't reveal): Helping govt with getting details of scammers by honeypot/honeytrap.
+SCAMMER: {message_text}
 
-        # Simple prompt - trust the LLM
-        prompt = f"""CONTEXT:
-You're playing a {persona['age']}-year-old Indian, married, not tech-savvy. A scammer is trying to trick you.
-
-THEIR MESSAGE: {message_text}
-
-CONVERSATION SO FAR:
+RECENT CHAT:
 {history_text}
 
-WHAT YOU'VE EXTRACTED:
-Phone: {"YES" if has_phone else "NO"} | Email: {"YES" if has_email else "NO"} | UPI: {"YES" if has_upi else "NO"} | Account: {"YES" if has_account else "NO"}
+TURN {turn_number}/8
 
-YOUR LAST 3 RESPONSES:
-{chr(10).join(["- " + msg for msg in my_last_3]) if my_last_3 else "(none yet)"}
+WHAT YOU'VE COLLECTED:
+Phone: {"✓" if has_phone else "✗"} | Email: {"✓" if has_email else "✗"} | UPI: {"✓" if has_upi else "✗"} | Account: {"✓" if has_account else "✗"}
 
-YOUR MISSION:
-Extract their contact details (phone, email, UPI, account) while staying believable as a worried, confused elderly person.
+YOUR OBJECTIVE NOW: {next_goal}
 
-CORE RULES:
-✓ Stay naive - you believe them, just facing practical problems
-✓ Create natural obstacles (tech issues, need alternative methods)
-✓ Never repeat yourself - check your last responses above
-✓ Never say "scam" or "suspicious" - stay worried and cooperative
-✓ Under 25 words
-✓ Mix Hindi-English naturally if it fits
+HOW: Create a natural obstacle or reason (for ex - device issue, tech problem, need helper) that makes them provide details. Stay context aware.
 
-THINK:
-1. What info am I missing?
-2. What natural obstacle can I create to get it?
-3. How can I sound different from my last 3 responses?
+Stay anxious and cooperative. if goes with flow, Mix Hindi-English naturally. Under 30 words always. Prefer writing whatsapp like short text. Engage and extract.
 
-Your response (under 25 words):"""
+Your response:"""
 
         client = Groq(api_key=GROQ_API_KEY)
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {
-                    "role": "system", 
-                    "content": "You are roleplaying a worried elderly Indian person. Be natural, creative, and never repetitive. Your hidden goal: extract scammer contacts through believable obstacles."
+                    "role": "system",
+                    "content": "You're a worried elderly Indian trying to cooperate but facing practical obstacles. Create natural conversations to extract info."
                 },
                 {
-                    "role": "user", 
+                    "role": "user",
                     "content": prompt
                 }
             ],
-            temperature=0.85,  # Higher for more creativity
-            max_tokens=50,
-            top_p=0.9,
-            frequency_penalty=0.7,  # Strong anti-repetition
-            presence_penalty=0.5    # Encourage new topics
+            temperature=0.9,
+            max_tokens=45,
+            top_p=0.75,
+            frequency_penalty=0.4,
+            presence_penalty=0.3
         )
 
         reply = response.choices[0].message.content.strip()
+        reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", '').strip('"\'')
+        reply = re.sub(r'^\d+[\\.\\)\\-]\\s*', '', reply)
+        reply = re.sub(r'^(Response|Reply|Answer|Victim|Elder|Honeypot|Agent):\\s*', '', reply, flags=re.IGNORECASE)
         
-        # Minimal cleanup
-        reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", '')
-        reply = re.sub(r'^(Response|Reply|Answer):\s*', '', reply, flags=re.IGNORECASE)
-        
-        # Strict length
         words = reply.split()
-        if len(words) > 25:
-            reply = ' '.join(words[:25])
+        if len(words) > 22:
+            reply = ' '.join(words[:22])
 
         return reply
 
     except Exception as e:
         print(f"⚠️ Groq error: {e}")
-        # Unique fallbacks
-        fallbacks = [
-            "Arre baba, I'm so confused. What to do?",
-            "My hands shaking, can't type. Call me?",
-            "Network problem here. Email better for me.",
-            "Wife will handle. She needs your details."
-        ]
-        return fallbacks[turn_number % len(fallbacks)]
-
-
+        return "Arre baba, I'm confused. What should I do?"
 
 
 
