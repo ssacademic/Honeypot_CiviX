@@ -28,29 +28,44 @@ from threading import Lock
 from collections import deque
 
 class RateLimitTracker:
-    def __init__(self, rpm_limit=25):
+    def __init__(self, rpm_limit=20):  # Reduced from 25 for safety
         self.rpm_limit = rpm_limit
         self.request_times = deque()
         self.lock = Lock()
-
+        self.min_interval = 3.5  # ✅ CRITICAL: Minimum 3.5s between API calls
+        self.last_request = 0    # ✅ Track last request time
     
     def wait_if_needed(self):
         with self.lock:
             now = time.time()
             
+            # ✅ ENFORCE MINIMUM INTERVAL (Prevents burst throttling)
+            if self.last_request > 0:
+                time_since_last = now - self.last_request
+                if time_since_last < self.min_interval:
+                    wait_time = self.min_interval - time_since_last
+                    print(f"⏱️  Min interval: waiting {wait_time:.1f}s (last request was {time_since_last:.1f}s ago)")
+                    time.sleep(wait_time)
+                    now = time.time()
+            
             # Clean old requests (older than 60 seconds)
             while self.request_times and now - self.request_times[0] > 60:
                 self.request_times.popleft()
             
-            # Rate limit check ONLY (no minimum interval)
+            # RPM limit check
             if len(self.request_times) >= self.rpm_limit:
                 oldest = self.request_times[0]
-                wait_time = 60 - (now - oldest) + 0.5
-                print(f"⏱️  Rate limit hit: waiting {wait_time:.1f}s")
+                wait_time = 60 - (now - oldest) + 1.0  # +1s buffer
+                print(f"⏱️  RPM limit: waiting {wait_time:.1f}s")
                 time.sleep(wait_time)
+                now = time.time()
             
             # Record this request
             self.request_times.append(time.time())
+            self.last_request = time.time()  # ✅ Update last request time
+            
+            # Log current state
+            print(f"📊 Rate limiter: {len(self.request_times)}/{self.rpm_limit} used in last 60s")
     
     def get_status(self):
         with self.lock:
@@ -59,7 +74,26 @@ class RateLimitTracker:
                 self.request_times.popleft()
             used = len(self.request_times)
             remaining = self.rpm_limit - used
-            return {"used": used, "remaining": remaining, "limit": self.rpm_limit}
+            
+            # Calculate time since last request
+            time_since_last = now - self.last_request if self.last_request > 0 else 999
+            
+            return {
+                "used": used,
+                "remaining": remaining,
+                "limit": self.rpm_limit,
+                "time_since_last_request": f"{time_since_last:.1f}s",
+                "ready_in": f"{max(0, self.min_interval - time_since_last):.1f}s"
+            }
+
+# Initialize with safer limit
+rate_limiter = RateLimitTracker(rpm_limit=20)
+
+def pace_groq_request():
+    rate_limiter.wait_if_needed()
+
+print("✅ Advanced rate limiter initialized (20 RPM, 3.5s min interval)")
+
 
 rate_limiter = RateLimitTracker(rpm_limit=25)
 
