@@ -28,7 +28,7 @@ from threading import Lock
 
 _request_pacer_lock = Lock()
 _last_groq_request_time = 0
-MIN_REQUEST_INTERVAL = 2.0  # Minimum 2 seconds between ANY Groq requests
+MIN_REQUEST_INTERVAL = 3.0  # Minimum 2 seconds between ANY Groq requests
 
 def pace_groq_request():
     """
