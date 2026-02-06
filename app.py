@@ -28,11 +28,11 @@ from threading import Lock
 from collections import deque
 
 class RateLimitTracker:
-    def __init__(self, rpm_limit=25):
+    def __init__(self, rpm_limit=15):
         self.rpm_limit = rpm_limit
         self.request_times = deque()
         self.lock = Lock()
-        self.min_interval = 5
+        self.min_interval = 6
         self.last_request = 0
     
     def wait_if_needed(self):
