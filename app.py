@@ -641,36 +641,22 @@ PRIMARY GOAL: Get phone, email, UPI, bank accounts, links.
                 print(f"⏳ Retrying with pacing (attempt {attempt + 2}/{max_retries})")
                 continue
             
+            
             # Final failure
             if attempt == max_retries - 1:
                 import traceback
                 traceback.print_exc()
                 
-                # VARIED FALLBACKS (from Version B)
-                if turn_number <= 3:
-                    fallbacks = [
-                        "Arre yaar, samajh nahin aa raha. Aapka number aur email kya hai?",
-                        "Bahut confusion hai. WhatsApp pe contact kar sakte hain?",
-                        "Main nervous ho gaya. Customer care number bataiye?",
-                        "Verify karna hai. Number aur email dijiye.",
-                    ]
-                elif turn_number <= 6:
-                    fallbacks = [
-                        "Wait karo. Phone number aur email do pehle.",
-                        "Confirm karna hai. Official link aur contact chahiye?",
-                        "Detail mein batao. WhatsApp number kya hai?",
-                        "Manager ka number aur UPI ID bhejo.",
-                    ]
-                else:
-                    fallbacks = [
-                        "Supervisor se baat karni hai. Number do.",
-                        "Manager ka number, email, UPI - sab bhejo.",
-                        "Senior ka contact chahiye. Jaldi batao.",
-                    ]
-                
-                fallback = random.choice(fallbacks)
-                print(f"   ✅ Using fallback: {fallback}\n")
+                # Use smart fallback that checks what's already extracted
+                fallback = generate_smart_fallback(
+                    message_text, 
+                    conversation_history, 
+                    turn_number, 
+                    contacts_found
+                )
+                print(f"   ✅ Using smart fallback: {fallback}\n")
                 return fallback
+
     
     # Should never reach here, but safety fallback
     return "Aapka contact details chahiye - number aur email do."
