@@ -500,20 +500,35 @@ def generate_response_groq(message_text, conversation_history, turn_number, scam
     full_convo = " ".join([msg['text'] for msg in conversation_history])
     
     # Track what we've extracted
+    # Extract ACTUAL values (not just flags)
+    extracted_phones = re.findall(r'\b[6-9]\d{9}\b', full_convo)
+    extracted_emails = re.findall(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo)
+    extracted_upis = []
+    for match in re.findall(r'\b([a-zA-Z0-9._-]+@[a-zA-Z0-9_-]+)\b', full_convo):
+        if '@' in match:
+            parts = match.split('@', 1)
+            if len(parts) == 2 and '.' not in parts[1] and match not in extracted_emails:
+                extracted_upis.append(match)
+    extracted_links = re.findall(r'https?://[^\s]+', full_convo)
+    
+    # Build status showing ACTUAL values
     contacts_found = []
-    if re.search(r'\b[6-9]\d{9}\b', full_convo):
+    status_lines = []
+    if extracted_phones:
         contacts_found.append("phone")
-    if re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
+        status_lines.append(f"✅ Phone: {extracted_phones[0]}")
+    if extracted_emails:
         contacts_found.append("email")
-    if re.search(r'@[a-zA-Z0-9_-]+\b', full_convo) and not re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
+        status_lines.append(f"✅ Email: {extracted_emails[0]}")
+    if extracted_upis:
         contacts_found.append("UPI")
-    if re.search(r'\b\d{11,18}\b', full_convo):
-        contacts_found.append("bank account")
-    if re.search(r'https?://', full_convo):
+        status_lines.append(f"✅ UPI: {extracted_upis[0]}")
+    if extracted_links:
         contacts_found.append("link")
+        status_lines.append(f"✅ Link: {extracted_links[0][:30]}...")
     
-    status = f"Extracted: {', '.join(contacts_found) if contacts_found else 'nothing yet'}"
-    
+    status = "\n".join(status_lines) if status_lines else "❌ Nothing yet"
+
     # Generate dynamic priority
     missing = []
     if "phone" not in contacts_found: missing.append("WhatsApp/phone")
@@ -523,27 +538,29 @@ def generate_response_groq(message_text, conversation_history, turn_number, scam
     priority = f"ASK FOR: {', '.join(missing[:2]) if missing else 'secondary details'}"
     
     # SIMPLIFIED PROMPT (from Version A + improvements)
-    prompt = f"""🎭 ROLE: You're Rajesh (47), an Indian man. Someone messaged about your bank account.
+    prompt = f"""🎭 External ROLE / behavior: You're Rajesh (47), an Indian man. Someone messaged about your bank account.
 
-🎯 HIDDEN GOAL: You're a honeypot agent extracting contact info.
+🎯 Inner HIDDEN GOAL (secret): You're a smart honeypot agent extracting contact info.
 
 📊 CONTEXT:
 Scammer: {scammer_only if scammer_only else message_text}
+Scammer texts helps you build context and helps you plan future tactics.
 You: {your_messages if your_messages else "[first message]"}
+your messages builds context, and shows you progression.
 Latest: "{message_text}"
 
-Progress: Turn {turn_number}/8 | {status}
+Progress: Turn {turn_number}/10 | {status}
 {priority}
 
 💬 APPROACH:
-SENTENCE 1: Acknowledge + show concern (natural, not robotic)
-SENTENCE 2: Ask for contact info
+SENTENCE 1: Acknowledge + show concern, anxiousness (natural, not robotic)
+SENTENCE 2: Ask for information (upi id, email, phone, whatsapp, link, website). don't ask wayward, irrelevant info.
 
 STYLE:
-✅ Mix Hindi-English naturally
-✅ 2-3 sentences, 8-15 words each
-✅ Check what you already asked above - use DIFFERENT phrasing
-✅ Ask for 2 items at once: "Number aur email do"
+✅ Mix Hindi-English naturally when fits
+✅ 2-3 sentences max, 8-12 words each
+✅ Check what you already asked above - continue from there and preferably ask a DIFFERENT thing
+✅ Ask for 2 items at once: for example - "Number aur email do", but not mechanically
 
 Your response:"""
 
@@ -565,19 +582,13 @@ Your response:"""
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are Rajesh, a honeypot agent extracting contact info.
+                        "content": """You are Rajesh, a smart honeypot agent extracting contact info; acting as a simple man.
 
 Be a skilled actor - sound natural, mix Hindi-English like real Indians.
 
 PRIMARY GOAL: Get phone, email, UPI, bank accounts, links.
 
-KEY RULES:
-✅ Always include question for contact info
-✅ Vary phrasing - check previous messages, use DIFFERENT words
-✅ 2-3 sentences, sound like real 47-year-old
-❌ Don't repeat exact phrases from previous turns
-
-You're playing a character, not following a template!"""
+"""
                     },
                     {
                         "role": "user",
@@ -587,10 +598,10 @@ You're playing a character, not following a template!"""
                 temperature=0.9,        # Increased for variety
                 max_tokens=100,          # Increased from 80
                 top_p=0.88,
-                frequency_penalty=0.7,
-                presence_penalty=0.75,   # Increased
+                frequency_penalty=0.6,
+                presence_penalty=0.5,   # Increased
                 stop=["\n\n", "Scammer:", "You:", "---"],
-                timeout=8.0
+                timeout=15.0
             )
 
             reply = response.choices[0].message.content.strip()
@@ -666,135 +677,6 @@ You're playing a character, not following a template!"""
 
         
    
-
-# ============================================================
-# HELPER FUNCTION: generate_smart_fallback()
-# (Add this BEFORE generate_response_groq if not already present)
-# ============================================================
-
-"""
-⚠️ DEPENDENCY: This function requires generate_smart_fallback()
-   If you haven't added it yet, paste this function ABOVE generate_response_groq():
-"""
-
-def generate_smart_fallback(message_text, conversation_history, turn_number, contacts_found):
-    """Goal-oriented fallback: EVERY response requests specific contact info"""
-    
-    # Get conversation history
-    agent_messages = " ".join([
-        msg['text'].lower() 
-        for msg in conversation_history 
-        if msg['sender'] == 'agent'
-    ])
-    
-    # Check what we've already asked for
-    asked_for_phone = any(word in agent_messages for word in ['number', 'phone', 'contact', 'whatsapp', 'mobile'])
-    asked_for_email = any(word in agent_messages for word in ['email', 'mail'])
-    asked_for_upi = any(word in agent_messages for word in ['upi', 'phonepe', 'paytm', 'gpay'])
-    asked_for_link = any(word in agent_messages for word in ['link', 'website', 'url', 'portal'])
-    
-    # Check what we've extracted
-    has_phone = "phone" in contacts_found
-    has_email = "email" in contacts_found
-    has_upi = "UPI" in contacts_found
-    has_link = "link" in contacts_found
-    
-    # ============================================================
-    # TURN 1-2: Build trust + ask for primary contact
-    # ============================================================
-    if turn_number <= 2:
-        return random.choice([
-            "Arre bhai, samajh nahi aa raha. Aapka office number kya hai?",
-            "Verify karna hai. Customer care number aur email dijiye.",
-            "Theek hai. Pehle WhatsApp number batao verification ke liye.",
-            "Main confuse hoon. Helpline number aur email ID share karo.",
-            "Aapka manager ka contact number dijiye please.",
-        ])
-    
-    # ============================================================
-    # TURN 3-5: Target specific missing entities
-    # ============================================================
-    elif turn_number <= 5:
-        # Ask for phone if we don't have it
-        if not has_phone and not asked_for_phone:
-            return random.choice([
-                "Aapka manager ka direct phone number dijiye please.",
-                "Customer care ka landline number kya hai?",
-                "WhatsApp number share karo jis pe message kar sakoon.",
-                "Office ka contact number batao verification ke liye.",
-            ])
-        
-        # Ask for email if we don't have it
-        elif not has_email and not asked_for_email:
-            return random.choice([
-                "Official email ID kya hai? Complaint karunga wahan.",
-                "Corporate email address dijiye confirmation ke liye.",
-                "Support team ka email batao escalation ke liye.",
-                "Head office ka email ID share karo urgent.",
-            ])
-        
-        # Ask for UPI if we don't have it
-        elif not has_upi and not asked_for_upi:
-            return random.choice([
-                "Refund ke liye company UPI ID kya hai?",
-                "Payment reverse karne ke liye official UPI handle batao.",
-                "Branch ka PhonePe ya Paytm ID share karo.",
-                "Transaction ke liye company ka UPI ID dijiye.",
-            ])
-        
-        # Ask for links if we don't have them
-        elif not has_link and not asked_for_link:
-            return random.choice([
-                "Company ka official website link bhejo verification ke liye.",
-                "Portal ka URL kya hai jahan login kar sakoon?",
-                "Branch ki Google Maps location link share karo.",
-                "Help center ka webpage dijiye.",
-            ])
-        
-        # If we have main items, ask for secondary details
-        else:
-            return random.choice([
-                "Senior manager ka contact number aur email batao.",
-                "Branch ka complete address aur alternate number do.",
-                "Employee ID aur supervisor email dijiye verification ke liye.",
-                "Regional office ka toll-free number share karo.",
-                "Head office ka address aur support email batao.",
-            ])
-    
-    # ============================================================
-    # TURN 6-8: High pressure - ask for MULTIPLE items
-    # ============================================================
-    else:
-        return random.choice([
-            "Manager ka number, email, aur UPI - teeno abhi bhejo.",
-            "Head office ka landline number aur email ID dijiye jaldi.",
-            "Supervisor ka WhatsApp number aur branch address do.",
-            "Branch manager ka contact aur official UPI ID chahiye.",
-            "Senior officer ka mobile aur corporate email batao.",
-            "Helpline number, website, aur UPI ID share karo.",
-            "Regional head ka phone aur email dijiye please.",
-            "Complaint ke liye manager number aur support email chahiye.",
-        ])
-
-
-print("\n" + "="*60)
-print("✅ COMPLETE generate_response_groq() FUNCTION READY!")
-print("="*60)
-print("\n📋 INCLUDES:")
-print("   • Main function: generate_response_groq()")
-print("   • Helper function: generate_smart_fallback()")
-print("   • Optimized prompts (system + user)")
-print("   • Enhanced error diagnostics")
-print("   • Goal-oriented fallbacks")
-print("\n🎯 FEATURES:")
-print("   • Every response asks for contact info")
-print("   • No wasted turns (threats/accusations removed)")
-print("   • Smart fallback checks conversation history")
-print("   • Progressive strategy (basic → detailed → aggressive)")
-print("   • Late turns ask for multiple items")
-print("\n⏱️ Ready to copy-paste and replace!")
-print("="*60)
-
 
 # ============================================================
 # ENTITY EXTRACTION (Unchanged)
@@ -1203,24 +1085,11 @@ def should_end_conversation(session_id):
     )
 
     # Maximum turns
-    MAX_TURNS = 8
+    MAX_TURNS = 10
     if turn_count >= MAX_TURNS:
         return (True, f"Maximum turns reached ({turn_count}/{MAX_TURNS})")
 
     # High-value intelligence collected
-    has_bank = len(accumulated_intel["bankAccounts"]) > 0
-    has_upi = len(accumulated_intel["upiIds"]) > 0
-    has_phone = len(accumulated_intel["phoneNumbers"]) > 0
-    has_email = len(accumulated_intel["emails"]) > 0
-
-    high_value_count = sum([has_bank, has_upi, has_phone, has_email])
-
-    if high_value_count >= 3 and turn_count >= 6:
-        return (True, f"High-value intel: {high_value_count} key entities after {turn_count} turns")
-
-    # Intelligence saturation
-    if total_entities >= 4 and turn_count >= 6:
-        return (True, f"Intelligence saturation: {total_entities} entities over {turn_count} turns")
 
     # Continue conversation
     return (False, f"Continue (turn {turn_count}/{MAX_TURNS}, {total_entities} entities)")
