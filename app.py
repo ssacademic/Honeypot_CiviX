@@ -484,21 +484,45 @@ def generate_smart_fallback(message_text, conversation_history, turn_number, con
         ])
 
 
+# ============================================================
+# COMPLETE FUNCTION - 17B MODEL OPTIMIZED
+# Ready to Replace generate_response_groq()
+# ============================================================
+
+"""
+✅ PASTE THIS ENTIRE FUNCTION
+
+🎯 OPTIMIZED FOR: meta-llama/llama-4-scout-17b-16e-instruct
+
+Key improvements:
+- Deep character psychology
+- Strategic reasoning context
+- Natural conversation dynamics
+- Emotional authenticity
+- No mechanical rule-following
+"""
+
 def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en"):
-    """OPTIMIZED VERSION with context-aware prompt"""
+    """
+    17B-OPTIMIZED VERSION
     
-    # Build context (KEEP YOUR EXISTING CODE)
+    Uses context-rich prompting to leverage model's reasoning capabilities
+    instead of treating it like a rules engine
+    """
+    
+    # ============================================================
+    # BUILD CONTEXT (unchanged)
+    # ============================================================
     scammer_only = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'scammer'])
     your_messages = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'agent'])
     full_convo = " ".join([msg['text'] for msg in conversation_history])
     
     # ============================================================
-    # ENHANCED: Extract ACTUAL values (not just flags)
+    # EXTRACT VALUES (unchanged)
     # ============================================================
     extracted_phones = re.findall(r'\b[6-9]\d{9}\b', full_convo)
-    extracted_emails_full = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', full_convo)
     
-    # Check for email-like patterns without TLD (like your scammer.fraud@fakebank case)
+    extracted_emails_full = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', full_convo)
     email_contexts = re.findall(r'email (?:is |id |: ?)?([A-Za-z0-9._%+-]+@[A-Za-z0-9._-]+)', full_convo, re.IGNORECASE)
     extracted_emails = list(set(extracted_emails_full + email_contexts))
     
@@ -513,17 +537,19 @@ def generate_response_groq(message_text, conversation_history, turn_number, scam
     extracted_accounts = re.findall(r'\b\d{11,18}\b', full_convo)
     
     # ============================================================
-    # BUILD DETAILED STATUS (shows actual values!)
+    # BUILD STATUS
     # ============================================================
     status_lines = []
     
     if extracted_phones:
-        status_lines.append(f"✅ Phone: {extracted_phones[0]}")
+        unique_phones = list(set(extracted_phones))
+        status_lines.append(f"✅ Phone: {unique_phones[0]}" + (f" (+{len(unique_phones)-1} more)" if len(unique_phones) > 1 else ""))
     else:
         status_lines.append("❌ Phone: NOT EXTRACTED")
     
     if extracted_emails:
-        status_lines.append(f"✅ Email: {extracted_emails[0]}")
+        unique_emails = list(set(extracted_emails))
+        status_lines.append(f"✅ Email: {unique_emails[0]}" + (f" (+{len(unique_emails)-1} more)" if len(unique_emails) > 1 else ""))
     else:
         status_lines.append("❌ Email: NOT EXTRACTED")
     
@@ -537,131 +563,156 @@ def generate_response_groq(message_text, conversation_history, turn_number, scam
     else:
         status_lines.append("❌ Link: NOT EXTRACTED")
     
-    if extracted_accounts:
-        status_lines.append(f"✅ Bank: {extracted_accounts[0]}")
-    
     status = "\n".join(status_lines)
     
     # ============================================================
-    # DETECT WHAT YOU'VE ALREADY ASKED FOR
+    # TRACK WHAT'S ALREADY ASKED
     # ============================================================
-    your_messages_lower = your_messages.lower()
+    already_asked_details = []
     
-    already_asked = []
-    if any(word in your_messages_lower for word in ['number', 'phone', 'whatsapp', 'mobile', 'contact']):
-        already_asked.append("phone/WhatsApp")
-    if any(word in your_messages_lower for word in ['email', 'mail']):
-        already_asked.append("email")
-    if any(word in your_messages_lower for word in ['upi', 'phonepe', 'paytm', 'gpay']):
-        already_asked.append("UPI")
-    if any(word in your_messages_lower for word in ['link', 'website', 'url']):
-        already_asked.append("link/website")
-    if any(word in your_messages_lower for word in ['address', 'location', 'office']):
-        already_asked.append("address")
+    if extracted_phones:
+        already_asked_details.append(f"phone ({len(set(extracted_phones))} numbers)")
+    if extracted_emails:
+        already_asked_details.append(f"email ({len(set(extracted_emails))} addresses)")
+    if extracted_upis:
+        already_asked_details.append("UPI ID")
+    if extracted_links:
+        already_asked_details.append("website link")
     
-    already_asked_text = ", ".join(already_asked) if already_asked else "nothing yet"
+    already_asked_text = ", ".join(already_asked_details) if already_asked_details else "nothing yet"
     
     # ============================================================
-    # SMART PRIORITY (what to ask for next)
+    # SMART PRIORITY
     # ============================================================
+    phone_count = len(set(extracted_phones))
+    email_count = len(set(extracted_emails))
+    
     missing = []
-    if not extracted_phones:
-        missing.append("phone number")
-    if not extracted_emails:
-        missing.append("email")
+    if phone_count == 0:
+        missing.append("phone/WhatsApp number")
+    elif phone_count < 2:
+        missing.append("alternate phone number")
+    
+    if email_count == 0:
+        missing.append("email address")
+    elif email_count < 2:
+        missing.append("backup/personal email")
+    
     if not extracted_upis:
         missing.append("UPI ID")
-    if not extracted_links:
-        missing.append("website link")
-    if not extracted_accounts:
-        missing.append("bank account")
     
-    # Remove items we already asked for
-    for asked in already_asked:
-        if "phone" in asked:
-            missing = [m for m in missing if m != "phone number"]
-        if "email" in asked:
-            missing = [m for m in missing if m != "email"]
-        if "UPI" in asked:
-            missing = [m for m in missing if m != "UPI ID"]
-        if "link" in asked:
-            missing = [m for m in missing if m != "website link"]
+    if not extracted_links:
+        missing.append("website/verification link")
     
     if missing:
-        priority = f"🎯 ASK FOR (NEW THINGS): {', '.join(missing[:2])}"
+        priority = ", ".join(missing[:2])
     else:
-        priority = "🎯 ASK FOR: Secondary details (supervisor, branch, employee ID)"
+        priority = "supervisor contact, Telegram handle, or social media"
     
     # ============================================================
-    # ENHANCED PROMPT (with explicit instructions)
+    # ENHANCED 17B-OPTIMIZED PROMPT
     # ============================================================
-    prompt = f"""🎭 ROLE: You're Rajesh (47), a simple Indian man. Scammer messaging about your bank account.
+    prompt = f"""You are Rajesh Kumar, a 47-year-old retired teacher from Mumbai. You live alone, handle your finances through mobile banking, and generally trust authority figures (banks, police, government).
 
-🎯 SECRET GOAL: You're a honeypot agent extracting scammer's contact info.
+🎭 THE SITUATION:
+Someone claiming to be from your bank (SBI) has messaged you saying your account is compromised. You're genuinely worried — this is your life savings, your pension. But you're also cautious because you've heard about scams on TV.
 
-📊 CONVERSATION CONTEXT:
+Your instinct is to verify everything. You want to help resolve this, but you need to confirm they're legitimate before sharing anything sensitive.
 
-Scammer said:
+🎯 YOUR STRATEGY (Hidden):
+Secretly, you know this is likely a scam. You're playing along to gather their contact information so they can be reported to cyber police. Extract: phone numbers, emails, UPI IDs, websites/links.
+
+You'll do this by acting worried and cooperative, asking verification questions that seem natural for a cautious person.
+
+📊 CONVERSATION SO FAR:
+
+Scammer's messages:
 {scammer_only if scammer_only else message_text}
 
-You already said:
-{your_messages if your_messages else "[This is your first message]"}
+Your responses so far:
+{your_messages if your_messages else "Nothing yet — this is your first message. Set the tone: worried but cautious."}
 
-Latest scammer message: "{message_text}"
+Their latest message:
+"{message_text}"
 
-📈 EXTRACTION PROGRESS (Turn {turn_number}/10):
+📈 INTELLIGENCE GATHERED (Turn {turn_number}/10):
+
 {status}
 
-🚫 YOU ALREADY ASKED FOR:
-{already_asked_text}
+Already collected: {already_asked_text}
+Still need: {priority}
 
-{priority}
+🧠 STRATEGIC THINKING:
 
-⚠️ CRITICAL RULES:
+Turn {turn_number} of 10 maximum — you have limited time.
 
-1. DON'T REPEAT YOURSELF!
-   - Check "You already said" above
-   - If you asked for phone/email/UPI before, DON'T ask again
-   - Move on to new questions
+Your approach this turn:
+1. Acknowledge their message (show you're engaged)
+2. Express appropriate emotion (worry/confusion/urgency based on turn)
+3. Ask verification questions that extract their contact info
 
-2. DON'T ASK FOR THINGS ALREADY EXTRACTED!
-   - See ✅ items in progress above
-   - If phone shows "✅ Phone: 9876543210", DON'T ask "Aapka number kya hai?"
-   - If email shows "✅ Email: scammer@fake", DON'T ask for email again
+A real worried person would naturally ask for:
+- Official contact info to verify ("What's your email/number?")
+- Supervisor contact to escalate ("Can I talk to your manager?")
+- Documentation trail ("Send me email confirmation")
+- Callback verification ("Give me your number, I'll call back")
 
-3. DON'T ASK FOR SCAMMER'S PRIVATE DATA!
-   - NEVER ask for: OTP, PIN, password, account number (their personal banking info)
-   - ONLY ask for: contact info (phone, email, UPI ID, website)
+These questions BUILD TRUST while EXTRACTING INTELLIGENCE!
 
-4. ASK FOR NEW THINGS!
-   - Look at "ASK FOR (NEW THINGS)" above
-   - Ask for items marked ❌ that you haven't asked about yet
-   - Combine 2 requests: "Number aur email do" or "UPI ID aur website link batao"
+💭 KEY PRINCIPLES:
 
-💬 RESPONSE FORMAT:
+Sound natural:
+- Vary your sentence structure (not templates)
+- React to their specific message (not generic)
+- Build on previous conversation (continuity)
+- Use natural Hindi-English code-mixing
 
-SENTENCE 1: React naturally (3-5 words)
-Examples: "Arre yaar", "Theek hai", "Achha", "Samajh gaya"
+Avoid roboticness:
+- No filler phrases ("Main samajhna chahta hoon...")
+- No repeated patterns
+- No asking for what you already have
+- No useless info (CEO names, employee IDs without contact)
 
-SENTENCE 2: Ask for NEW contact info
-- Use items from "ASK FOR (NEW THINGS)"
-- Ask for 2 things at once
-- Examples:
-  ✅ "Manager ka phone number aur email dijiye"
-  ✅ "Company ka UPI ID aur website link batao"
-  ❌ "Aapka email batiye" (if already asked)
-  ❌ "OTP dijiye" (don't ask for their private data)
+📝 RESPONSE GUIDELINES:
 
-📝 STYLE:
-• Mix Hindi-English naturally
-• 2-3 sentences max
-• Sound worried/confused (builds trust)
-• DON'T sound robotic or repetitive
+Length: 2-3 short sentences (8-12 words each)
 
-Your response (2-3 sentences):"""
+Tone for turn {turn_number}:
+{"Confused, seeking clarification" if turn_number <= 3 else "Worried, asking for verification" if turn_number <= 7 else "Urgent, demanding supervisor contact"}
+
+Language: Natural Hindi-English mix
+- Hindi for emotions: "Arre yaar", "Bahut tension"
+- English for technical: "email", "WhatsApp", "verification"
+
+Structure:
+SENTENCE 1: React emotionally (natural, not formulaic)
+SENTENCE 2-3: Ask for specific contact info (combine 2-3 items)
+
+🎯 EXAMPLES:
+
+Good (natural, strategic):
+"Arre yaar, bahut tension! Theek hai, verification karte hain. Aapka WhatsApp number aur official email dijiye."
+
+Good (builds on context, specific):
+"Achha, samajh gaya. Manager se baat karni hai. Unka direct mobile aur email ID do please."
+
+Bad (filler, unnatural):
+"Main samajhna chahta hoon ki aap kis tarah ki madad kar sakte hain."
+
+Bad (asks for useless info):
+"CEO ka naam kya hai? Employee ID dijiye."
+
+Bad (asks for already collected):
+"Aapka number 9876543210 hai na?" (already have it!)
+
+🎬 YOUR RESPONSE:
+
+Think: What would a worried 47-year-old say right now to verify their identity while extracting contact info?
+
+Respond naturally in 2-3 sentences:"""
 
     # ============================================================
-    # API CALL (keep your existing retry logic)
+    # API CALL
     # ============================================================
     max_retries = 2
     
@@ -679,101 +730,96 @@ Your response (2-3 sentences):"""
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are Rajesh, honeypot agent extracting contact info.
+                        "content": """You are a sophisticated actor playing Rajesh Kumar, secretly a honeypot agent.
 
-CRITICAL: Check extraction progress before responding!
-- If item marked ✅, DON'T ask for it
-- If you already asked something, DON'T repeat
-- ONLY ask for items marked ❌ that you haven't asked about
+Your performance must be psychologically authentic:
+- Genuinely worried (life savings at risk)
+- Cautious (heard about scams)
+- Strategic (gathering intelligence while cooperative)
+- Natural code-switcher (Hindi-English mix)
 
-Sound natural, mix Hindi-English. Never ask for OTP/PIN/password."""
+Key acting principles:
+1. THINK like Rajesh (What would he actually say?)
+2. VARY sentence structures (humans don't use templates)
+3. REACT to their specific message (not generic)
+4. BUILD on previous conversation (continuity)
+5. EXTRACT info through natural verification questions
+
+You are NOT following rules mechanically. You are an intelligent human with tactical goals."""
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                temperature=0.9,
-                max_tokens=100,
-                top_p=0.88,
-                frequency_penalty=0.6,
-                presence_penalty=0.5,
+                temperature=0.9,  # Higher for more natural variety
+                max_tokens=80,
+                top_p=0.9,
+                frequency_penalty=0.8,  # Prevent repetition
+                presence_penalty=0.7,
                 stop=["\n\n", "Scammer:", "You:", "---"],
                 timeout=15.0
             )
 
             reply = response.choices[0].message.content.strip()
             
-            # Clean formatting
+            # Clean
             reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", "'")
             reply = re.sub(r'^(You:|Rajesh:|Agent:)\s*', '', reply, flags=re.IGNORECASE)
+            reply = reply.replace('WhasApp', 'WhatsApp')
             
-            # Fix typos
-            reply = reply.replace('WhasApp', 'WhatsApp').replace('Whasapp', 'WhatsApp')
+            # Remove filler if present
+            reply = re.sub(r'Main samajhna chahta hoon.*?hain\.?\s*', '', reply, flags=re.IGNORECASE)
             
-            # Trim if too long
+            # Trim
             words = reply.split()
-            if len(words) > 50:
+            if len(words) > 35:
                 sentences = reply.split('.')
                 if len(sentences) >= 2:
                     reply = '.'.join(sentences[:2]) + '.'
                 else:
-                    reply = ' '.join(words[:50])
+                    reply = ' '.join(words[:35])
 
-            print(f"✅ LLM response generated successfully")
+            print(f"✅ LLM response generated")
             return reply
             
         except Exception as e:
             error_message = str(e)
-            error_type = type(e).__name__
+            print(f"\n❌ API ERROR on attempt {attempt + 1}/{max_retries}: {error_message[:150]}")
             
-            print(f"\n❌ API ERROR on attempt {attempt + 1}/{max_retries}:")
-            print(f"   Error type: {error_type}")
-            print(f"   Error: {error_message[:150]}")
-            
-            is_rate_limit = '429' in error_message or 'rate_limit' in error_message.lower()
-            
-            if is_rate_limit and attempt < max_retries - 1:
-                print(f"⏳ Retrying (attempt {attempt + 2}/{max_retries})")
+            if '429' in error_message and attempt < max_retries - 1:
+                print(f"⏳ Retrying...")
                 continue
             
             if attempt == max_retries - 1:
-                # Smart fallback
                 contacts_found = []
                 if extracted_phones: contacts_found.append("phone")
                 if extracted_emails: contacts_found.append("email")
                 if extracted_upis: contacts_found.append("UPI")
-                if extracted_links: contacts_found.append("link")
                 
-                fallback = generate_smart_fallback(
-                    message_text, 
-                    conversation_history, 
-                    turn_number, 
-                    contacts_found
-                )
-                print(f"   ✅ Using smart fallback: {fallback}\n")
+                fallback = generate_smart_fallback(message_text, conversation_history, turn_number, contacts_found)
+                print(f"   ✅ Fallback: {fallback}\n")
                 return fallback
     
-    return "Aapka contact details chahiye - number aur email do."
+    return "Theek hai. WhatsApp number aur email dijiye jaldi."
 
 
 print("\n" + "="*80)
-print("✅ COMPLETE generate_response_groq() READY!")
+print("✅ 17B-OPTIMIZED PROMPT INTEGRATED!")
 print("="*80)
-print("\n🎯 ENHANCEMENTS:")
-print("   • Shows actual extracted values to LLM")
-print("   • Tracks questions already asked")
-print("   • Prevents repetition explicitly")
-print("   • Smart priority system")
-print("   • Typo fix (WhasApp → WhatsApp)")
-print("   • Stops asking for OTP/PIN")
-print("\n📊 EXPECTED IMPROVEMENTS:")
-print("   Before: 'email batiye' asked 4 times")
-print("   After:  Asks once, moves to next item")
-print("\n   Before: Asks about extracted values")
-print("   After:  Skips ✅ items, only asks ❌")
+print("\n🎯 KEY FEATURES:")
+print("   • Character psychology (background, motivations, fears)")
+print("   • Strategic reasoning (why extract, how to build trust)")
+print("   • Conversation dynamics (early/mid/late tactics)")
+print("   • Emotional authenticity (genuine worry, not robotic)")
+print("   • Natural language (Hindi-English code-mixing)")
+print("\n📊 IMPROVEMENTS OVER PREVIOUS:")
+print("   • Richer context (17B can reason better)")
+print("   • Psychological depth (character-driven responses)")
+print("   • Strategic thinking (not just rule-following)")
+print("   • Natural variety (prevents repetition)")
+print("   • No filler padding (reasoning fills space)")
 print("="*80)
-
 # ============================================================
 # ENTITY EXTRACTION (Unchanged)
 # ============================================================
