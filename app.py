@@ -70,35 +70,7 @@ import random
 from threading import Lock
 from functools import wraps
 
-# ============================================================
-# ✅ NEW: GROQ RATE LIMITER (Prevents 429 errors)
-# ============================================================
 
-_groq_lock = Lock()
-_last_groq_call = 0
-MIN_CALL_INTERVAL = 2.1  # 2.1 seconds = max 28 calls/min (safe buffer)
-
-def rate_limit_groq(func):
-    """Decorator to rate-limit Groq API calls"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        global _last_groq_call
-        
-        with _groq_lock:
-            now = time.time()
-            time_since_last = now - _last_groq_call
-            
-            if time_since_last < MIN_CALL_INTERVAL:
-                wait_time = MIN_CALL_INTERVAL - time_since_last
-                print(f"⏳ Rate limiting: waiting {wait_time:.1f}s")
-                time.sleep(wait_time)
-            
-            _last_groq_call = time.time()
-            return func(*args, **kwargs)
-    
-    return wrapper
-
-print("✅ Rate limiter initialized (28 calls/min max)")
 
 # ============================================================
 # DETECTION LOGIC: Advisory Only (Not Blocking)
@@ -289,32 +261,32 @@ def detect_language(message):
 # GROQ-POWERED RESPONSE GENERATION (Context-Aware)
 # ============================================================
 
-@rate_limit_groq
-def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en"):
-    """Intelligent conversational agent - FIXED HYBRID"""
-    try:
-        # Build context (keeping your excellent logic)
-        scammer_only = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'scammer'])
-        your_messages = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'agent'])
-        full_convo = " ".join([msg['text'] for msg in conversation_history])
-        
-        # Intelligence tracking
-        contacts_found = []
-        if re.search(r'\b[6-9]\d{9}\b', full_convo):
-            contacts_found.append("phone")
-        if re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
-            contacts_found.append("email")
-        if re.search(r'@[a-zA-Z0-9_-]+\b', full_convo) and not re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
-            contacts_found.append("UPI")
-        if re.search(r'\b\d{11,18}\b', full_convo):
-            contacts_found.append("bank account")
-        if re.search(r'https?://', full_convo):
-            contacts_found.append("link")
-        
-        status = f"Extracted: {', '.join(contacts_found) if contacts_found else 'nothing yet'}"
 
-        # ✅ ORIGINAL HYBRID PROMPT (NO ANTI-REPETITION WARNINGS)
-        prompt = f"""🎭 YOUR OUTER ROLE: You're a 47-year-old Indian man named Rajesh. Someone is messaging about your bank account.
+def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en"):
+    """Intelligent conversational agent - SDK-AWARE VERSION"""
+    
+    # Build context (same as before)
+    scammer_only = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'scammer'])
+    your_messages = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'agent'])
+    full_convo = " ".join([msg['text'] for msg in conversation_history])
+    
+    # Intelligence tracking (same as before)
+    contacts_found = []
+    if re.search(r'\b[6-9]\d{9}\b', full_convo):
+        contacts_found.append("phone")
+    if re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
+        contacts_found.append("email")
+    if re.search(r'@[a-zA-Z0-9_-]+\b', full_convo) and not re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
+        contacts_found.append("UPI")
+    if re.search(r'\b\d{11,18}\b', full_convo):
+        contacts_found.append("bank account")
+    if re.search(r'https?://', full_convo):
+        contacts_found.append("link")
+    
+    status = f"Extracted: {', '.join(contacts_found) if contacts_found else 'nothing yet'}"
+
+    # Same prompt as before
+    prompt = f"""🎭 YOUR OUTER ROLE: You're a 47-year-old Indian man named Rajesh. Someone is messaging about your bank account.
 
 🎯 YOUR INNER GOAL (SECRET): You're a smart honeypot agent. Extract scammer's contact info (phone, email, UPI, bank account, links) through NATURAL conversation.
 
@@ -347,63 +319,86 @@ SENTENCE 2: Ask 1-2 SMART QUESTIONS that might reveal their contact details
 
 Your response (2-3 sentences):"""
 
-        # ✅ ORIGINAL PARAMETERS (DO NOT CHANGE)
-        client = Groq(api_key=GROQ_API_KEY)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a skilled actor playing Rajesh Kumar. Stay in character. Be intelligent and strategic. Sound natural - mix Hindi-English like real Indians. Don't repeat yourself. Understand the scam game and play it smartly."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.78,
-            max_tokens=65,
-            top_p=0.88,
-            frequency_penalty=0.7,
-            presence_penalty=0.6,
-            stop=["\n\n", "Scammer:", "You:", "---"]
-        )
+    # ✅ NEW: Exponential backoff wrapper
+    max_retries = 3
+    base_delay = 1
+    
+    for attempt in range(max_retries):
+        try:
+            client = Groq(api_key=GROQ_API_KEY)
+            
+            # ✅ SDK handles auto-retry internally (2 retries built-in)
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a skilled actor playing Rajesh Kumar. Stay in character. Be intelligent and strategic. Sound natural - mix Hindi-English like real Indians. Don't repeat yourself. Understand the scam game and play it smartly."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.78,
+                max_tokens=65,
+                top_p=0.88,
+                frequency_penalty=0.7,
+                presence_penalty=0.6,
+                stop=["\n\n", "Scammer:", "You:", "---"],
+                timeout=5.0  # ✅ Add timeout
+            )
 
-        reply = response.choices[0].message.content.strip()
-        
-        # Clean formatting
-        reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", "'")
-        reply = re.sub(r'^(You:|Rajesh:|Agent:)\s*', '', reply, flags=re.IGNORECASE)
-        
-        # Trim if too long
-        words = reply.split()
-        if len(words) > 40:
-            sentences = reply.split('.')
-            if len(sentences) >= 2:
-                reply = '.'.join(sentences[:2]) + '.'
-            else:
-                reply = ' '.join(words[:40])
+            reply = response.choices[0].message.content.strip()
+            
+            # Clean formatting (same as before)
+            reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", "'")
+            reply = re.sub(r'^(You:|Rajesh:|Agent:)\s*', '', reply, flags=re.IGNORECASE)
+            
+            # Trim if too long (same as before)
+            words = reply.split()
+            if len(words) > 40:
+                sentences = reply.split('.')
+                if len(sentences) >= 2:
+                    reply = '.'.join(sentences[:2]) + '.'
+                else:
+                    reply = ' '.join(words[:40])
 
-        return reply
-
-    except Exception as e:
-        print(f"⚠️ LLM error: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # ✅ ONLY CHANGE: Better fallbacks
-        contextual_fallbacks = [
-            "Arre yaar, samajh nahin aa raha. Aapka number aur email id kya hai?",
-            "Bahut confusion ho rahi hai. WhatsApp pe baat kar sakte hain?",
-            "Main thoda nervous ho gaya. Aapka customer care number bataiye?",
-            "Yeh kya chal raha hai? Link ya contact details bhej sakte ho?",
-            "Wait karo, pehle verify karna hai. Aapka phone number aur email do.",
-            "Main confirm karna chahta hoon. Koi official link hai?",
-            "Thoda detail mein samjhao. Aapka WhatsApp number kya hai?",
-            "Mujhe aapka supervisor se baat karni hai. Unka number do."
-        ]
-        
-        return random.choice(contextual_fallbacks)
+            return reply
+            
+        except Exception as e:
+            error_message = str(e)
+            
+            # Check if it's a rate limit error (429)
+            is_rate_limit = '429' in error_message or 'rate_limit' in error_message.lower()
+            
+            if is_rate_limit and attempt < max_retries - 1:
+                # Exponential backoff with jitter
+                wait_time = min(base_delay * (2 ** attempt) + random.uniform(0, 1), 16)
+                print(f"⏳ Rate limited. Retry {attempt + 1}/{max_retries} in {wait_time:.1f}s")
+                time.sleep(wait_time)
+                continue
+            
+            # Last attempt or non-rate-limit error
+            print(f"⚠️ LLM error (attempt {attempt + 1}/{max_retries}): {e}")
+            
+            if attempt == max_retries - 1:
+                # Final fallback
+                import traceback
+                traceback.print_exc()
+                
+                contextual_fallbacks = [
+                    "Arre yaar, samajh nahin aa raha. Aapka number aur email id kya hai?",
+                    "Bahut confusion ho rahi hai. WhatsApp pe baat kar sakte hain?",
+                    "Main thoda nervous ho gaya. Aapka customer care number bataiye?",
+                    "Yeh kya chal raha hai? Link ya contact details bhej sakte ho?",
+                    "Wait karo, pehle verify karna hai. Aapka phone number aur email do.",
+                    "Main confirm karna chahta hoon. Koi official link hai?",
+                    "Thoda detail mein samjhao. Aapka WhatsApp number kya hai?",
+                    "Mujhe aapka supervisor se baat karni hai. Unka number do."
+                ]
+                
+                return random.choice(contextual_fallbacks)
 
 
 # ============================================================
