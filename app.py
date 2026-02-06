@@ -295,21 +295,22 @@ def detect_language(message):
 
 
 def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en"):
-    """Intelligent conversational agent - VELOCITY-AWARE VERSION"""
+    """Intelligent conversational agent - FULLY PACED VERSION"""
     
-    # [All your existing context building code...]
+    # Build context
     scammer_only = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'scammer'])
     your_messages = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'agent'])
     full_convo = " ".join([msg['text'] for msg in conversation_history])
     
+    # Intelligence tracking
     contacts_found = []
-    if re.search(r'\b[6-9]\d{9}\b', full_convo):
+    if re.search(r'\b[6-9]\d{9}\b', full_convo):  # ✅ FIXED: Single backslash
         contacts_found.append("phone")
     if re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
         contacts_found.append("email")
     if re.search(r'@[a-zA-Z0-9_-]+\b', full_convo) and not re.search(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo):
         contacts_found.append("UPI")
-    if re.search(r'\b\d{11,18}\b', full_convo):
+    if re.search(r'\b\d{11,18}\b', full_convo):  # ✅ FIXED: Single backslash
         contacts_found.append("bank account")
     if re.search(r'https?://', full_convo):
         contacts_found.append("link")
@@ -349,14 +350,14 @@ SENTENCE 2: Ask 1-2 SMART QUESTIONS that might reveal their contact details
 
 Your response (2-3 sentences):"""
 
-    # ✅ CRITICAL: Pace request BEFORE making API call
-    pace_groq_request()  # This ensures 2s minimum gap from last request
-    
-    max_retries = 3
-    base_delay = 1
+    # ✅ FIXED: Reduced retries to minimize ghost calls
+    max_retries = 2  # Changed from 3 to 2
     
     for attempt in range(max_retries):
         try:
+            # ✅ CRITICAL FIX: Pace EVERY attempt (moved inside loop)
+            pace_groq_request()
+            
             client = Groq(api_key=GROQ_API_KEY)
             
             response = client.chat.completions.create(
@@ -372,11 +373,11 @@ Your response (2-3 sentences):"""
                     }
                 ],
                 temperature=0.78,
-                max_tokens=100,
+                max_tokens=80,
                 top_p=0.88,
                 frequency_penalty=0.7,
                 presence_penalty=0.6,
-                stop=["\n\n", "Scammer:", "You:", "---"],
+                stop=["\n\n", "Scammer:", "You:", "---"],  # ✅ FIXED: Single backslash
                 timeout=5.0
             )
 
@@ -402,9 +403,8 @@ Your response (2-3 sentences):"""
             is_rate_limit = '429' in error_message or 'rate_limit' in error_message.lower()
             
             if is_rate_limit and attempt < max_retries - 1:
-                wait_time = min(base_delay * (2 ** attempt) + random.uniform(0, 1), 16)
-                print(f"⏳ Rate limited despite pacing. Retry {attempt + 1}/{max_retries} in {wait_time:.1f}s")
-                time.sleep(wait_time)
+                # ✅ REMOVED manual sleep - pacing handles it in next iteration
+                print(f"⏳ Rate limited. Will retry with pacing (attempt {attempt + 2}/{max_retries})")
                 continue
             
             print(f"⚠️ LLM error (attempt {attempt + 1}/{max_retries}): {e}")
@@ -425,7 +425,6 @@ Your response (2-3 sentences):"""
                 ]
                 
                 return random.choice(contextual_fallbacks)
-
 
 # ============================================================
 # ENTITY EXTRACTION (Unchanged)
