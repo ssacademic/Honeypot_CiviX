@@ -484,92 +484,189 @@ def generate_smart_fallback(message_text, conversation_history, turn_number, con
         ])
 
 
-
 def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en"):
-    """
-    OPTIMIZED VERSION: Best practices from all iterations
-    - Retry logic with pacing (Version B)
-    - Simplified prompts (Version A/C)
-    - Enhanced diagnostics (Version B)
-    - Varied fallbacks (Version B)
-    """
+    """OPTIMIZED VERSION with context-aware prompt"""
     
-    # Build context (your existing logic is good)
+    # Build context (KEEP YOUR EXISTING CODE)
     scammer_only = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'scammer'])
     your_messages = " ".join([msg['text'] for msg in conversation_history if msg['sender'] == 'agent'])
     full_convo = " ".join([msg['text'] for msg in conversation_history])
     
-    # Track what we've extracted
-    # Extract ACTUAL values (not just flags)
+    # ============================================================
+    # ENHANCED: Extract ACTUAL values (not just flags)
+    # ============================================================
     extracted_phones = re.findall(r'\b[6-9]\d{9}\b', full_convo)
-    extracted_emails = re.findall(r'@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}', full_convo)
+    extracted_emails_full = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', full_convo)
+    
+    # Check for email-like patterns without TLD (like your scammer.fraud@fakebank case)
+    email_contexts = re.findall(r'email (?:is |id |: ?)?([A-Za-z0-9._%+-]+@[A-Za-z0-9._-]+)', full_convo, re.IGNORECASE)
+    extracted_emails = list(set(extracted_emails_full + email_contexts))
+    
     extracted_upis = []
     for match in re.findall(r'\b([a-zA-Z0-9._-]+@[a-zA-Z0-9_-]+)\b', full_convo):
         if '@' in match:
             parts = match.split('@', 1)
             if len(parts) == 2 and '.' not in parts[1] and match not in extracted_emails:
                 extracted_upis.append(match)
+    
     extracted_links = re.findall(r'https?://[^\s]+', full_convo)
+    extracted_accounts = re.findall(r'\b\d{11,18}\b', full_convo)
     
-    # Build status showing ACTUAL values
-    contacts_found = []
+    # ============================================================
+    # BUILD DETAILED STATUS (shows actual values!)
+    # ============================================================
     status_lines = []
+    
     if extracted_phones:
-        contacts_found.append("phone")
         status_lines.append(f"✅ Phone: {extracted_phones[0]}")
+    else:
+        status_lines.append("❌ Phone: NOT EXTRACTED")
+    
     if extracted_emails:
-        contacts_found.append("email")
         status_lines.append(f"✅ Email: {extracted_emails[0]}")
+    else:
+        status_lines.append("❌ Email: NOT EXTRACTED")
+    
     if extracted_upis:
-        contacts_found.append("UPI")
         status_lines.append(f"✅ UPI: {extracted_upis[0]}")
+    else:
+        status_lines.append("❌ UPI: NOT EXTRACTED")
+    
     if extracted_links:
-        contacts_found.append("link")
-        status_lines.append(f"✅ Link: {extracted_links[0][:30]}...")
+        status_lines.append(f"✅ Link: {extracted_links[0][:40]}...")
+    else:
+        status_lines.append("❌ Link: NOT EXTRACTED")
     
-    status = "\n".join(status_lines) if status_lines else "❌ Nothing yet"
-
-    # Generate dynamic priority
+    if extracted_accounts:
+        status_lines.append(f"✅ Bank: {extracted_accounts[0]}")
+    
+    status = "\n".join(status_lines)
+    
+    # ============================================================
+    # DETECT WHAT YOU'VE ALREADY ASKED FOR
+    # ============================================================
+    your_messages_lower = your_messages.lower()
+    
+    already_asked = []
+    if any(word in your_messages_lower for word in ['number', 'phone', 'whatsapp', 'mobile', 'contact']):
+        already_asked.append("phone/WhatsApp")
+    if any(word in your_messages_lower for word in ['email', 'mail']):
+        already_asked.append("email")
+    if any(word in your_messages_lower for word in ['upi', 'phonepe', 'paytm', 'gpay']):
+        already_asked.append("UPI")
+    if any(word in your_messages_lower for word in ['link', 'website', 'url']):
+        already_asked.append("link/website")
+    if any(word in your_messages_lower for word in ['address', 'location', 'office']):
+        already_asked.append("address")
+    
+    already_asked_text = ", ".join(already_asked) if already_asked else "nothing yet"
+    
+    # ============================================================
+    # SMART PRIORITY (what to ask for next)
+    # ============================================================
     missing = []
-    if "phone" not in contacts_found: missing.append("WhatsApp/phone")
-    if "email" not in contacts_found: missing.append("email")
-    if "UPI" not in contacts_found: missing.append("UPI")
-    if "link" not in contacts_found: missing.append("website link")
-    priority = f"ASK FOR: {', '.join(missing[:2]) if missing else 'secondary details'}"
+    if not extracted_phones:
+        missing.append("phone number")
+    if not extracted_emails:
+        missing.append("email")
+    if not extracted_upis:
+        missing.append("UPI ID")
+    if not extracted_links:
+        missing.append("website link")
+    if not extracted_accounts:
+        missing.append("bank account")
     
-    # SIMPLIFIED PROMPT (from Version A + improvements)
-    prompt = f"""🎭 External ROLE / behavior: You're Rajesh (47), an Indian man. Someone messaged about your bank account.
+    # Remove items we already asked for
+    for asked in already_asked:
+        if "phone" in asked:
+            missing = [m for m in missing if m != "phone number"]
+        if "email" in asked:
+            missing = [m for m in missing if m != "email"]
+        if "UPI" in asked:
+            missing = [m for m in missing if m != "UPI ID"]
+        if "link" in asked:
+            missing = [m for m in missing if m != "website link"]
+    
+    if missing:
+        priority = f"🎯 ASK FOR (NEW THINGS): {', '.join(missing[:2])}"
+    else:
+        priority = "🎯 ASK FOR: Secondary details (supervisor, branch, employee ID)"
+    
+    # ============================================================
+    # ENHANCED PROMPT (with explicit instructions)
+    # ============================================================
+    prompt = f"""🎭 ROLE: You're Rajesh (47), a simple Indian man. Scammer messaging about your bank account.
 
-🎯 Inner HIDDEN GOAL (secret): You're a smart honeypot agent extracting contact info.
+🎯 SECRET GOAL: You're a honeypot agent extracting scammer's contact info.
 
-📊 CONTEXT:
-Scammer: {scammer_only if scammer_only else message_text}
-Scammer texts helps you build context and helps you plan future tactics.
-You: {your_messages if your_messages else "[first message]"}
-your messages builds context, and shows you progression.
-Latest: "{message_text}"
+📊 CONVERSATION CONTEXT:
 
-Progress: Turn {turn_number}/10 | {status}
+Scammer said:
+{scammer_only if scammer_only else message_text}
+
+You already said:
+{your_messages if your_messages else "[This is your first message]"}
+
+Latest scammer message: "{message_text}"
+
+📈 EXTRACTION PROGRESS (Turn {turn_number}/10):
+{status}
+
+🚫 YOU ALREADY ASKED FOR:
+{already_asked_text}
+
 {priority}
 
-💬 APPROACH:
-SENTENCE 1: Acknowledge + show concern, anxiousness (natural, not robotic)
-SENTENCE 2: Ask for information (upi id, email, phone, whatsapp, link, website). don't ask wayward, irrelevant info.
+⚠️ CRITICAL RULES:
 
-STYLE:
-✅ Mix Hindi-English naturally when fits
-✅ 2-3 sentences max, 8-12 words each
-✅ Check what you already asked above - continue from there and preferably ask a DIFFERENT thing
-✅ Ask for 2 items at once: for example - "Number aur email do", but not mechanically
+1. DON'T REPEAT YOURSELF!
+   - Check "You already said" above
+   - If you asked for phone/email/UPI before, DON'T ask again
+   - Move on to new questions
 
-Your response:"""
+2. DON'T ASK FOR THINGS ALREADY EXTRACTED!
+   - See ✅ items in progress above
+   - If phone shows "✅ Phone: 9876543210", DON'T ask "Aapka number kya hai?"
+   - If email shows "✅ Email: scammer@fake", DON'T ask for email again
 
-    # RETRY LOGIC (from Version B)
+3. DON'T ASK FOR SCAMMER'S PRIVATE DATA!
+   - NEVER ask for: OTP, PIN, password, account number (their personal banking info)
+   - ONLY ask for: contact info (phone, email, UPI ID, website)
+
+4. ASK FOR NEW THINGS!
+   - Look at "ASK FOR (NEW THINGS)" above
+   - Ask for items marked ❌ that you haven't asked about yet
+   - Combine 2 requests: "Number aur email do" or "UPI ID aur website link batao"
+
+💬 RESPONSE FORMAT:
+
+SENTENCE 1: React naturally (3-5 words)
+Examples: "Arre yaar", "Theek hai", "Achha", "Samajh gaya"
+
+SENTENCE 2: Ask for NEW contact info
+- Use items from "ASK FOR (NEW THINGS)"
+- Ask for 2 things at once
+- Examples:
+  ✅ "Manager ka phone number aur email dijiye"
+  ✅ "Company ka UPI ID aur website link batao"
+  ❌ "Aapka email batiye" (if already asked)
+  ❌ "OTP dijiye" (don't ask for their private data)
+
+📝 STYLE:
+• Mix Hindi-English naturally
+• 2-3 sentences max
+• Sound worried/confused (builds trust)
+• DON'T sound robotic or repetitive
+
+Your response (2-3 sentences):"""
+
+    # ============================================================
+    # API CALL (keep your existing retry logic)
+    # ============================================================
     max_retries = 2
     
     for attempt in range(max_retries):
         try:
-            # Pace EVERY attempt
             pace_groq_request()
             
             quota = rate_limiter.get_status()
@@ -582,24 +679,25 @@ Your response:"""
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are Rajesh, a smart honeypot agent extracting contact info; acting as a simple man.
+                        "content": """You are Rajesh, honeypot agent extracting contact info.
 
-Be a skilled actor - sound natural, mix Hindi-English like real Indians.
+CRITICAL: Check extraction progress before responding!
+- If item marked ✅, DON'T ask for it
+- If you already asked something, DON'T repeat
+- ONLY ask for items marked ❌ that you haven't asked about
 
-PRIMARY GOAL: Get phone, email, UPI, bank accounts, links.
-
-"""
+Sound natural, mix Hindi-English. Never ask for OTP/PIN/password."""
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                temperature=0.9,        # Increased for variety
-                max_tokens=100,          # Increased from 80
+                temperature=0.9,
+                max_tokens=100,
                 top_p=0.88,
                 frequency_penalty=0.6,
-                presence_penalty=0.5,   # Increased
+                presence_penalty=0.5,
                 stop=["\n\n", "Scammer:", "You:", "---"],
                 timeout=15.0
             )
@@ -609,6 +707,9 @@ PRIMARY GOAL: Get phone, email, UPI, bank accounts, links.
             # Clean formatting
             reply = reply.replace('**', '').replace('*', '').replace('"', '').replace("'", "'")
             reply = re.sub(r'^(You:|Rajesh:|Agent:)\s*', '', reply, flags=re.IGNORECASE)
+            
+            # Fix typos
+            reply = reply.replace('WhasApp', 'WhatsApp').replace('Whasapp', 'WhatsApp')
             
             # Trim if too long
             words = reply.split()
@@ -626,28 +727,24 @@ PRIMARY GOAL: Get phone, email, UPI, bank accounts, links.
             error_message = str(e)
             error_type = type(e).__name__
             
-            # ENHANCED DIAGNOSTICS (from Version B)
             print(f"\n❌ API ERROR on attempt {attempt + 1}/{max_retries}:")
             print(f"   Error type: {error_type}")
-            print(f"   Error message: {error_message[:150]}")
+            print(f"   Error: {error_message[:150]}")
             
             is_rate_limit = '429' in error_message or 'rate_limit' in error_message.lower()
             
-            if is_rate_limit:
-                print(f"   🚨 Rate limit hit")
-            
-            # Retry only on rate limits
             if is_rate_limit and attempt < max_retries - 1:
-                print(f"⏳ Retrying with pacing (attempt {attempt + 2}/{max_retries})")
+                print(f"⏳ Retrying (attempt {attempt + 2}/{max_retries})")
                 continue
             
-            
-            # Final failure
             if attempt == max_retries - 1:
-                import traceback
-                traceback.print_exc()
+                # Smart fallback
+                contacts_found = []
+                if extracted_phones: contacts_found.append("phone")
+                if extracted_emails: contacts_found.append("email")
+                if extracted_upis: contacts_found.append("UPI")
+                if extracted_links: contacts_found.append("link")
                 
-                # Use smart fallback that checks what's already extracted
                 fallback = generate_smart_fallback(
                     message_text, 
                     conversation_history, 
@@ -656,49 +753,165 @@ PRIMARY GOAL: Get phone, email, UPI, bank accounts, links.
                 )
                 print(f"   ✅ Using smart fallback: {fallback}\n")
                 return fallback
-
     
-    # Should never reach here, but safety fallback
     return "Aapka contact details chahiye - number aur email do."
 
-        
-   
+
+print("\n" + "="*80)
+print("✅ COMPLETE generate_response_groq() READY!")
+print("="*80)
+print("\n🎯 ENHANCEMENTS:")
+print("   • Shows actual extracted values to LLM")
+print("   • Tracks questions already asked")
+print("   • Prevents repetition explicitly")
+print("   • Smart priority system")
+print("   • Typo fix (WhasApp → WhatsApp)")
+print("   • Stops asking for OTP/PIN")
+print("\n📊 EXPECTED IMPROVEMENTS:")
+print("   Before: 'email batiye' asked 4 times")
+print("   After:  Asks once, moves to next item")
+print("\n   Before: Asks about extracted values")
+print("   After:  Skips ✅ items, only asks ❌")
+print("="*80)
 
 # ============================================================
 # ENTITY EXTRACTION (Unchanged)
 # ============================================================
 
 def extract_entities_enhanced(text):
-    """Extract intelligence - STRICT email/UPI separation"""
+    """
+    Extract intelligence with CONTEXT AWARENESS
+    
+    NEW: Reads surrounding text to classify email vs UPI correctly
+    - If scammer says "my email is X@Y", classify as email (even without .com)
+    - If scammer says "my UPI is X@Y", classify as UPI
+    - If unclear, use technical format (dot in domain = email, no dot = UPI)
+    - Dual classification when appropriate (email claimed but UPI format)
+    
+    PRESERVED: All existing extraction for banks, phones, links, amounts, etc.
+    """
     entities = {}
-
-    # Emails FIRST: Must have .com/.in/.org etc
-    emails = re.findall(
-        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b',
-        text
-    )
-    entities["emails"] = list(set(emails))
-
-    # UPI: word@word with NO dot in domain
-    potential_upis = re.findall(r'\b([a-zA-Z0-9._-]+@[a-zA-Z0-9_-]+)\b', text)
     
+    text_lower = text.lower()
+    
+    # ============================================================
+    # EMAIL/UPI EXTRACTION (Enhanced with context awareness)
+    # ============================================================
+    
+    # Find all @ patterns
+    all_patterns = re.findall(r'\b([A-Za-z0-9._%+-]+@[A-Za-z0-9._-]+)\b', text)
+    
+    emails = []
     upi_ids = []
-    for item in potential_upis:
-        if '@' in item:
-            local, domain = item.split('@', 1)
-            if '.' not in domain and item not in emails:
-                upi_ids.append(item)
     
+    for pattern in all_patterns:
+        if '@' not in pattern:
+            continue
+        
+        try:
+            local, domain = pattern.split('@', 1)
+        except:
+            continue
+        
+        pattern_lower = pattern.lower()
+        
+        # ============================================================
+        # CONTEXT DETECTION (NEW!)
+        # ============================================================
+        
+        # Check if scammer explicitly called it "email"
+        email_contexts = [
+            f"email is {pattern_lower}",
+            f"email: {pattern_lower}",
+            f"my email {pattern_lower}",
+            f"email id {pattern_lower}",
+            f"email address {pattern_lower}",
+            f"email - {pattern_lower}",
+        ]
+        
+        is_called_email = any(ctx in text_lower for ctx in email_contexts)
+        
+        # Check if scammer explicitly called it "UPI"
+        upi_contexts = [
+            f"upi is {pattern_lower}",
+            f"upi id is {pattern_lower}",
+            f"upi id {pattern_lower}",
+            f"upi: {pattern_lower}",
+            f"my upi {pattern_lower}",
+            f"phonepe {pattern_lower}",
+            f"paytm {pattern_lower}",
+            f"gpay {pattern_lower}",
+        ]
+        
+        is_called_upi = any(ctx in text_lower for ctx in upi_contexts)
+        
+        # ============================================================
+        # TECHNICAL FORMAT CHECK
+        # ============================================================
+        # Standard email has domain extension (.com, .in, .org, etc.)
+        has_domain_extension = '.' in domain and re.search(r'\.(com|in|org|net|co|edu|gov|ai|io)', domain, re.IGNORECASE)
+        
+        # ============================================================
+        # CLASSIFICATION LOGIC (Enhanced)
+        # ============================================================
+        
+        # Case 1: Scammer explicitly called it "email"
+        if is_called_email:
+            emails.append(pattern)
+            
+            # ALSO add to UPI if it's a valid UPI format (no extension)
+            if not has_domain_extension:
+                upi_ids.append(pattern)
+        
+        # Case 2: Scammer explicitly called it "UPI"
+        elif is_called_upi:
+            upi_ids.append(pattern)
+        
+        # Case 3: Technical classification (no explicit context)
+        elif has_domain_extension:
+            # Has .com/.in/.org → Email
+            emails.append(pattern)
+        
+        else:
+            # No extension → UPI
+            upi_ids.append(pattern)
+    
+    entities["emails"] = list(set(emails))
     entities["upiIds"] = list(set(upi_ids))
-
-    # Rest
+    
+    # ============================================================
+    # REST OF EXTRACTION (UNCHANGED - preserves existing functionality)
+    # ============================================================
+    
+    # Bank accounts (11-18 digits)
     entities["bankAccounts"] = list(set(re.findall(r'\b\d{11,18}\b', text)))
+    
+    # Phone numbers (Indian format: starts with 6-9, then 9 digits)
     entities["phoneNumbers"] = list(set(re.findall(r'\b[6-9]\d{9}\b', text)))
-    entities["phishingLinks"] = list(set(re.findall(r'https?://[^\s]+|(?:bit\.ly|tinyurl|goo\.gl)/\w+', text, re.IGNORECASE)))
-    entities["amounts"] = list(set(re.findall(r'(?:₹|rs\.?\s*|rupees?\s*)(\d+(?:,\d+)*(?:\.\d+)?)', text, re.IGNORECASE)))
-    entities["bankNames"] = list(set(re.findall(r'\b(sbi|state bank|hdfc|icici|axis|kotak|pnb|bob|canara|union bank|paytm|phonepe|googlepay)\b', text, re.IGNORECASE)))
-
+    
+    # Phishing links (full URLs or shortened links)
+    entities["phishingLinks"] = list(set(re.findall(
+        r'https?://[^\s]+|(?:bit\.ly|tinyurl|goo\.gl|cutt\.ly)/\w+', 
+        text, 
+        re.IGNORECASE
+    )))
+    
+    # Amounts (₹, Rs., rupees followed by numbers)
+    entities["amounts"] = list(set(re.findall(
+        r'(?:₹|rs\.?\s*|rupees?\s*)(\d+(?:,\d+)*(?:\.\d+)?)', 
+        text, 
+        re.IGNORECASE
+    )))
+    
+    # Bank names (common Indian banks and payment apps)
+    entities["bankNames"] = list(set(re.findall(
+        r'\b(sbi|state bank|hdfc|icici|axis|kotak|pnb|bob|canara|union bank|paytm|phonepe|googlepay)\b', 
+        text, 
+        re.IGNORECASE
+    )))
+    
     return entities
+
 
 
 # ============================================================
