@@ -28,7 +28,7 @@ from threading import Lock
 
 _request_pacer_lock = Lock()
 _last_groq_request_time = 0
-MIN_REQUEST_INTERVAL = 3.5  # Minimum 2 seconds between ANY Groq requests
+MIN_REQUEST_INTERVAL = 5  # Minimum 2 seconds between ANY Groq requests
 
 def pace_groq_request():
     """
@@ -400,18 +400,27 @@ Your response (2-3 sentences):"""
             
         except Exception as e:
             error_message = str(e)
+            
+            # ✅ ADD DETAILED LOGGING
+            print(f"\n❌ API ERROR on attempt {attempt + 1}/{max_retries}:")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Error message: {error_message[:200]}")  # First 200 chars
+            
             is_rate_limit = '429' in error_message or 'rate_limit' in error_message.lower()
             
+            if is_rate_limit:
+                print(f"   → Rate limit error detected")
+            
             if is_rate_limit and attempt < max_retries - 1:
-                # ✅ REMOVED manual sleep - pacing handles it in next iteration
-                print(f"⏳ Rate limited. Will retry with pacing (attempt {attempt + 2}/{max_retries})")
+                print(f"⏳ Will retry with pacing (attempt {attempt + 2}/{max_retries})")
                 continue
             
-            print(f"⚠️ LLM error (attempt {attempt + 1}/{max_retries}): {e}")
+            print(f"⚠️ FINAL FAILURE on attempt {attempt + 1}/{max_retries}")
+            print(f"   Falling back to static response")
             
             if attempt == max_retries - 1:
                 import traceback
-                traceback.print_exc()
+                traceback.print_exc()  # Full stack trace
                 
                 contextual_fallbacks = [
                     "Arre yaar, samajh nahin aa raha. Aapka number aur email id kya hai?",
@@ -425,6 +434,7 @@ Your response (2-3 sentences):"""
                 ]
                 
                 return random.choice(contextual_fallbacks)
+
 
 # ============================================================
 # ENTITY EXTRACTION (Unchanged)
