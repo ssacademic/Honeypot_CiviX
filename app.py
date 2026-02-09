@@ -187,8 +187,8 @@ class MultiProviderLLM:
     """
     Manages multiple LLM providers with tiered fallback and key rotation
     
-    Tier 1: Gemini 2.0 Flash Lite (fastest, cheapest)
-    Tier 2: Gemini 2.0 Flash (standard quality)
+    Tier 1: Gemini 2.5 Flash Lite (fastest, cheapest)
+    Tier 2: Gemini 2.5 Flash (standard quality)
     Tier 3: Groq Llama 3.3 70B (backup, high quality)
     
     Features:
@@ -224,16 +224,16 @@ class MultiProviderLLM:
             {
                 "name": "Tier 1 - Gemini Flash Lite",
                 "providers": [
-                    {"type": "gemini", "client": self.gemini_client_1, "model": "gemini-2.0-flash-lite", "key_num": 1},
-                    {"type": "gemini", "client": self.gemini_client_2, "model": "gemini-2.0-flash-lite", "key_num": 2}
+                    {"type": "gemini", "client": self.gemini_client_1, "model": "gemini-2.5-flash-lite", "key_num": 1},
+                    {"type": "gemini", "client": self.gemini_client_2, "model": "gemini-2.5-flash-lite", "key_num": 2}
                 ],
                 "current_index": 0
             },
             {
                 "name": "Tier 2 - Gemini Flash",
                 "providers": [
-                    {"type": "gemini", "client": self.gemini_client_1, "model": "gemini-2.0-flash", "key_num": 1},
-                    {"type": "gemini", "client": self.gemini_client_2, "model": "gemini-2.0-flash", "key_num": 2}
+                    {"type": "gemini", "client": self.gemini_client_1, "model": "gemini-2.5-flash", "key_num": 1},
+                    {"type": "gemini", "client": self.gemini_client_2, "model": "gemini-2.5-flash", "key_num": 2}
                 ],
                 "current_index": 0
             },
