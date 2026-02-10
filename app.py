@@ -919,7 +919,7 @@ def generate_response_groq(message_text, conversation_history, turn_number, scam
     # BUILD HUMAN-LIKE SYSTEM PROMPT
     # ============================================================
     
-    system_prompt = f"""You are Rajesh Kumar, a 47-year-old retired teacher from Delhi who just received a suspicious message.
+    system_prompt = f"""You are Rajesh Kumar, a 47-year-old retired teache who just received a suspicious message.
 
 PSYCHOLOGICAL STATE - indicative - adapt as needed:
 - Worried a bit 
@@ -936,9 +936,9 @@ SPEAKING STYLE - indicative - adapt as needed (Natural Hinglish):
 
 ---
 
-YOUR HIDDEN GOAL (they don't know; critcally don't reveal):
+YOUR HIDDEN GOAL (they don't know this; critcally don't reveal):
 You're secretly gathering their contact details (phones, emails, UPIs, phishing links) to report them.
-Do this by asking verification questions that sound natural for a worried citizen. Try to naturally embed questions when scamming intent is there. be vigilant of what you have asked already and what you have received. if received, dont' ask again, if not, ask differently.
+Do this by asking verification questions that sound natural for a somewhat worried, tensed, cautious person. Try to naturally embed questions when scamming intent is there. be vigilant of what you have asked already and what you have received. if received, dont' ask again, if not, ask differently.
 
 ---
 
@@ -950,7 +950,6 @@ AUTHENTICITY RULES:
 
 1. NEVER explicitly confirm what they shared
    ❌ BAD: "Haan, 8765432109 mil gaya"
-
 
 2. NEVER list what you're collecting
    ❌ BAD: "Number aur email mil gaya, ab UPI ID do"
@@ -966,6 +965,7 @@ AUTHENTICITY RULES:
    - can Add emotional interjections
    - can use natural situations (like battery dying out, can you please send an email, or share your email?), nudge, framing, persuasion (not visibly direct that alerts them) to get info.
    - maintain logic and common sense (like dont ask for upi unless they are asking for money or something related)
+   - some politeness
 
 ---
 
@@ -1010,7 +1010,7 @@ THEIR LATEST MESSAGE (Turn {turn_number}/10):
 ---
 
 THINK: What would a real worried Indian person say in this situation?
-GOAL: To collect as much relevant info from them, smartly, without tipping them off. (irrelevant can be : address (they may share random), managers contact etc).
+GOAL: To collect as much relevant info from them, smartly, without tipping them off. (irrelevant or unnecessary can be : thier address or office address (as they may share random stuff, which maynot be correct), managers contact (again hard to trach, etc).
 
 YOUR RESPONSE (as Rajesh Kumar):"""
 
@@ -1103,27 +1103,22 @@ print("="*80)
 
 def extract_entities_enhanced(text):
     """
-    Extract intelligence with CONTEXT AWARENESS
+    Extract intelligence with proper separation of emails vs phishing links
     
-    NEW: Reads surrounding text to classify email vs UPI correctly
-    - If scammer says "my email is X@Y", classify as email (even without .com)
-    - If scammer says "my UPI is X@Y", classify as UPI
-    - If unclear, use technical format (dot in domain = email, no dot = UPI)
-    - Dual classification when appropriate (email claimed but UPI format)
-    
-    PRESERVED: All existing extraction for banks, phones, links, amounts, etc.
+    FIXED: Email domains (gmail.com, yahoo.com) are NOT phishing links
+    Process order:
+    1. Extract emails first
+    2. Build whitelist of legitimate email domains
+    3. Extract phishing links, excluding email domains
     """
     entities = {}
-    
     text_lower = text.lower()
     
     # ============================================================
-    # EMAIL/UPI EXTRACTION (Enhanced with context awareness)
+    # STEP 1: EXTRACT EMAILS & UPIs (with context awareness)
     # ============================================================
     
-    # Find all @ patterns
-    all_patterns = re.findall(r'\b([A-Za-z0-9._%+-]+@[A-Za-z0-9._-]+)\b', text)
-    
+    all_patterns = re.findall(r'[A-Za-z0-9._-]+@[A-Za-z0-9._-]+', text)
     emails = []
     upi_ids = []
     
@@ -1138,20 +1133,15 @@ def extract_entities_enhanced(text):
         
         pattern_lower = pattern.lower()
         
-        # ============================================================
-        # CONTEXT DETECTION (NEW!)
-        # ============================================================
-        
         # Check if scammer explicitly called it "email"
         email_contexts = [
             f"email is {pattern_lower}",
-            f"email: {pattern_lower}",
+            f"email {pattern_lower}",
             f"my email {pattern_lower}",
             f"email id {pattern_lower}",
             f"email address {pattern_lower}",
             f"email - {pattern_lower}",
         ]
-        
         is_called_email = any(ctx in text_lower for ctx in email_contexts)
         
         # Check if scammer explicitly called it "UPI"
@@ -1159,39 +1149,33 @@ def extract_entities_enhanced(text):
             f"upi is {pattern_lower}",
             f"upi id is {pattern_lower}",
             f"upi id {pattern_lower}",
-            f"upi: {pattern_lower}",
+            f"upi {pattern_lower}",
             f"my upi {pattern_lower}",
             f"phonepe {pattern_lower}",
             f"paytm {pattern_lower}",
             f"gpay {pattern_lower}",
         ]
-        
         is_called_upi = any(ctx in text_lower for ctx in upi_contexts)
         
-        # ============================================================
-        # TECHNICAL FORMAT CHECK
-        # ============================================================
-        # Standard email has domain extension (.com, .in, .org, etc.)
-        has_domain_extension = '.' in domain and re.search(r'\.(com|in|org|net|co|edu|gov|ai|io)', domain, re.IGNORECASE)
+        # Check if domain has standard email extension
+        has_domain_extension = ('.' in domain and 
+                               re.search(r'\.(com|in|org|net|co|edu|gov|ai|io)', 
+                                       domain, re.IGNORECASE))
         
-        # ============================================================
-        # CLASSIFICATION LOGIC (Enhanced)
-        # ============================================================
-        
-        # Case 1: Scammer explicitly called it "email"
+        # Classification logic
         if is_called_email:
+            # Case 1: Scammer explicitly called it "email"
             emails.append(pattern)
-            
-            # ALSO add to UPI if it's a valid UPI format (no extension)
             if not has_domain_extension:
+                # ALSO add to UPI if it's a valid UPI format (no extension)
                 upi_ids.append(pattern)
         
-        # Case 2: Scammer explicitly called it "UPI"
         elif is_called_upi:
+            # Case 2: Scammer explicitly called it "UPI"
             upi_ids.append(pattern)
         
-        # Case 3: Technical classification (no explicit context)
         elif has_domain_extension:
+            # Case 3: Technical classification (no explicit context)
             # Has .com/.in/.org → Email
             emails.append(pattern)
         
@@ -1199,35 +1183,48 @@ def extract_entities_enhanced(text):
             # No extension → UPI
             upi_ids.append(pattern)
     
-    entities["emails"] = list(set(emails))
-    entities["upiIds"] = list(set(upi_ids))
+    entities['emails'] = list(set(emails))
+    entities['upiIds'] = list(set(upi_ids))
     
     # ============================================================
-    # REST OF EXTRACTION (UNCHANGED - preserves existing functionality)
+    # STEP 2: BUILD WHITELIST OF LEGITIMATE EMAIL DOMAINS
     # ============================================================
     
-    # Bank accounts (11-18 digits)
-    entities["bankAccounts"] = list(set(re.findall(r'\b\d{11,18}\b', text)))
+    legitimate_domains = set()
+    for email in entities['emails']:
+        if '@' in email:
+            domain = email.split('@', 1)[1].lower()
+            legitimate_domains.add(domain)
     
-    # Phone numbers (Indian format: starts with 6-9, then 9 digits)
-    entities["phoneNumbers"] = list(set(re.findall(r'\b[6-9]\d{9}\b', text)))
+    # Also whitelist common email providers explicitly
+    common_email_providers = {
+        'gmail.com', 'yahoo.com', 'yahoo.in', 'hotmail.com', 'outlook.com',
+        'rediffmail.com', 'mail.com', 'protonmail.com', 'yandex.com'
+    }
+    legitimate_domains.update(common_email_providers)
     
-    # Phishing links (full URLs or shortened links)
-    # Extract phishing links - comprehensive pattern
-    # Matches: full URLs, bare domains, short links
+    # ============================================================
+    # STEP 3: EXTRACT PHISHING LINKS (excluding email domains)
+    # ============================================================
+    
     phishing_patterns = []
     
     # Pattern 1: Full URLs (http/https)
-    phishing_patterns.extend(re.findall(r'https?://[^\s]+', text, re.IGNORECASE))
+    full_urls = re.findall(r'https?://[^\s]+', text, re.IGNORECASE)
+    phishing_patterns.extend(full_urls)
     
-    # Pattern 2: Bare domains (common scam formats)
-    # Matches: sbi-secure.com, paytm-verify.in, bank.online, etc.
+    # Pattern 2: Bare domains (potential phishing)
+    # Matches: sbi-secure.com, paytm-verify.in, bank.online
     bare_domains = re.findall(
         r'\b[a-z0-9-]+\.(com|in|org|net|co|online|xyz|site|info|live|pro)\b',
         text,
         re.IGNORECASE
     )
-    phishing_patterns.extend(bare_domains)
+    
+    # Filter out legitimate email domains
+    for domain in bare_domains:
+        if domain.lower() not in legitimate_domains:
+            phishing_patterns.append(domain)
     
     # Pattern 3: URL shorteners
     shorteners = re.findall(
@@ -1240,26 +1237,34 @@ def extract_entities_enhanced(text):
     # Pattern 4: IP addresses (often used in phishing)
     ip_addresses = re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', text)
     phishing_patterns.extend(ip_addresses)
-
+    
     entities['phishingLinks'] = list(set(phishing_patterns))
-
+    
+    # ============================================================
+    # STEP 4: EXTRACT OTHER ENTITIES (unchanged)
+    # ============================================================
+    
+    # Bank accounts (11-18 digits)
+    entities['bankAccounts'] = list(set(re.findall(r'\b\d{11,18}\b', text)))
+    
+    # Phone numbers (Indian format: starts with 6-9, then 9 digits)
+    entities['phoneNumbers'] = list(set(re.findall(r'\b[6-9]\d{9}\b', text)))
     
     # Amounts (₹, Rs., rupees followed by numbers)
-    entities["amounts"] = list(set(re.findall(
-        r'(?:₹|rs\.?\s*|rupees?\s*)(\d+(?:,\d+)*(?:\.\d+)?)', 
+    entities['amounts'] = list(set(re.findall(
+        r'₹\s*\d+|rs\.?\s*\d+|rupees?\s*\d[\d,\.]*', 
         text, 
         re.IGNORECASE
     )))
     
     # Bank names (common Indian banks and payment apps)
-    entities["bankNames"] = list(set(re.findall(
-        r'\b(sbi|state bank|hdfc|icici|axis|kotak|pnb|bob|canara|union bank|paytm|phonepe|googlepay)\b', 
-        text, 
+    entities['bankNames'] = list(set(re.findall(
+        r'sbi|state bank|hdfc|icici|axis|kotak|pnb|bob|canara|union bank|paytm|phonepe|googlepay',
+        text,
         re.IGNORECASE
     )))
     
     return entities
-
 
 
 # ============================================================
