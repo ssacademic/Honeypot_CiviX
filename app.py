@@ -1326,7 +1326,7 @@ def process_message_optimized(session_id, message_text, conversation_history, tu
     # Store indicators list for downstream use (e.g., dashboard)
     entities["keywords"] = all_indicators
 
-    print(f"✅ LLM Response: {agent_reply[:60]}...")
+
     print(f"📊 Extracted: {len(entities['bankAccounts'])} banks, {len(entities['upiIds'])} UPIs, {len(entities['phoneNumbers'])} phones, {len(entities.get('emails', []))} emails")
 
     return {
