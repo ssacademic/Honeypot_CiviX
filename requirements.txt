@@ -3,5 +3,6 @@ groq
 requests
 gunicorn
 google-genai
+openai
 
 
