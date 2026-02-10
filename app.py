@@ -32,6 +32,7 @@ from flask import Flask, request, jsonify
 
 from groq import Groq
 
+import random  # NEW
 
 
 # ============================================================
@@ -1331,6 +1332,18 @@ class SessionManager:
         self.create_session(session_id)
         return self.sessions[session_id]["turnCount"]
 
+                   # === NEW WRAPPERS FOR CONSISTENT NAMING ===
+    def session_exists(self, session_id):
+        """Wrapper for existing sessionexistsself method (backwards compatible)."""
+        return self.sessionexistssessionid(session_id) if hasattr(self, "sessionexistssessionid") else session_id in self.sessions
+
+    def get_all_sessions(self):
+        """Wrapper for existing getallsessionsself method (backwards compatible)."""
+        if hasattr(self, "getallsessionsself"):
+            return self.getallsessionsself()
+        return list(self.sessions.keys())
+
+
     def add_scam_marker(self, session_id, indicator_name, confidence):
         """
         Add scam marker with cumulative logic.
@@ -1985,7 +1998,7 @@ def health():
 def quota_status():
     """Check API quota usage - useful for debugging"""
     try:
-        status = rate_limiter.get_status()
+        status = rate_limiter.getstatus()
         return jsonify({
             "status": "success",
             "quota": {
