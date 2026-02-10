@@ -538,139 +538,83 @@ from functools import wraps
 # DETECTION LOGIC: Advisory Only (Not Blocking)
 # ============================================================
 
-def regex_scam_detection(message_text):
+def detect_scam_cumulative(session_id, message_text, conversation_history):
     """
-    Scam detection based on industry-standard patterns
-    Returns advisory signals - does NOT block LLM responses
+    FIXED: Cumulative scam detection - doesn't flip-flop.
+    
+    Analyzes current message + full conversation history.
+    Adds markers cumulatively. Once 3+ markers detected, scam flag STAYS True.
+    
+    Args:
+        session_id: Session to track markers
+        message_text: Latest message from scammer
+        conversation_history: All previous messages
+    
+    Returns:
+        tuple: (is_scam_confirmed, new_markers_found, total_markers)
     """
-
-    text_lower = message_text.lower()
-    indicators = []
-
-    # ============================================================
-    # DOMAIN KNOWLEDGE WHITELISTS (Universal Patterns)
-    # ============================================================
-
-    universal_legitimate_patterns = [
-        # Pattern 1: OTP messages (universal format across all services)
-        r'\botp\b.*\b(valid for|expires in|expire in)\s*\d+\s*(minute|min|second)',
-
-        # Pattern 2: Bank transaction notifications (RBI standard format)
-        r'(credited|debited).*\bavailable balance\b',
-
-        # Pattern 3: Success confirmations (universal acknowledgment)
-        r'\bhas been successfully\b.*(completed|done|processed|updated|verified)',
-
-        # Pattern 4: Official bank domains (verifiable)
-        r'visit\s+(www\.|https?://)?(hdfc|icici|sbi|axis|kotak|pnb|bob|canara|unionbank)(bank)?\.(com|co\.in)',
-    ]
-
-    for pattern in universal_legitimate_patterns:
-        if re.search(pattern, text_lower, re.IGNORECASE):
-            # Confirmed legitimate by domain knowledge
-            return False, "LOW", []
-
-    # ============================================================
-    # SCAM DETECTION PATTERNS (Industry Standard)
-    # ============================================================
-
-    # Pattern 1: Urgency pressure
-    urgency_patterns = [
-        r'\b(immediate|immediately|urgent|now|today|asap|hurry|quick|fast)\b',
-        r'\b(within \d+ (hour|minute)s?)\b',
-        r'\b(last chance|final (warning|notice)|limited time)\b'
-    ]
-
-    for pattern in urgency_patterns:
-        if re.search(pattern, text_lower):
-            indicators.append("urgency")
-            break
-
-    # Pattern 2: Account/service threats
-    threat_patterns = [
-        r'\b(block|suspend|deactivat|terminat|close|freeze|cancel)\b.*\b(account|card|service|kyc|wallet)\b',
-        r'\b(legal action|police|arrest|fir|court|penalty|fine|jail)\b',
-        r'\b(will be|has been|going to be)\b.*\b(block|suspend|close|deactivate)\b'
-    ]
-
-    for pattern in threat_patterns:
-        if re.search(pattern, text_lower):
-            indicators.append("threat")
-            break
-
-    # Pattern 3: Verification/KYC requests
-    verification_patterns = [
-        r'\b(verify|update|confirm|validate|complete|reactivate)\b.*\b(kyc|account|details|information|pan|aadhaar)\b',
-        r'\b(click|visit|go to|open)\b.*\b(link|website|url)\b'
-    ]
-
-    for pattern in verification_patterns:
-        if re.search(pattern, text_lower):
-            indicators.append("verification_request")
-            break
-
-    # Pattern 4: Payment demands
-    payment_patterns = [
-        r'\b(pay|send|transfer|deposit|remit)\b.*\b(₹|rs\.?|rupees?|\d+)\b',
-        r'\b(refund|cashback|prize|won|lottery|reward)\b.*\b(claim|collect|receive)\b',
-        r'\bupi\s*(id|:)?\s*[@:]?\s*\w+@\w+\b'
-    ]
-
-    for pattern in payment_patterns:
-        if re.search(pattern, text_lower):
-            indicators.append("payment_demand")
-            break
-
-    # Pattern 5: Suspicious links
-    link_patterns = [
-        r'(bit\.ly|tinyurl|t\.co|goo\.gl|cutt\.ly)/\w+',
-        r'https?://[^\s]+\b(verify|secure|update|login|bank|kyc)\b',
-    ]
-
-    for pattern in link_patterns:
-        if re.search(pattern, text_lower):
-            indicators.append("suspicious_link")
-            break
-
-    # Pattern 6: Phone number with call-to-action
-    if re.search(r'\b(call|dial|phone|contact|speak|talk)\b.*\b[6-9]\d{9}\b', text_lower):
-        indicators.append("phone_number")
-
-    # Pattern 7: Authority impersonation
-    authority_patterns = [
-        r'\b(bank|rbi|reserve bank)\b',
-        r'\b(sbi|hdfc|icici|axis|kotak|pnb|paytm|phonepe|gpay)\b',
-        r'\b(cbi|police|cyber cell|income tax|gst)\b'
-    ]
-
-    for pattern in authority_patterns:
-        if re.search(pattern, text_lower):
-            indicators.append("authority_impersonation")
-            break
-
-    # Pattern 8: Lottery/prize scams
-    if re.search(
-        r'\b(congratulations|winner|won|selected)\b.*\b(prize|lottery|lakh|crore|kbc)\b',
-        text_lower
-    ):
-        indicators.append("lottery_scam")
-
-    # ============================================================
-    # THRESHOLD: 2 indicators
-    # ============================================================
-    is_scam = len(indicators) >= 2
-
-    # Confidence scoring
-    if len(indicators) >= 4:
-        confidence = "VERY_HIGH"
-    elif len(indicators) >= 3:
-        confidence = "HIGH"
-    elif len(indicators) >= 2:
-        confidence = "MEDIUM"
-    else:
-        confidence = "LOW"
-
-    return is_scam, confidence, indicators
+    session = session_manager.sessions[session_id]
+    
+    # If already confirmed as scam, don't re-check
+    if session.get("scamDetectedFlag", False):
+        return True, [], session["scamMarkersCumulative"]
+    
+    # Build full conversation text for pattern matching
+    scammer_only = " ".join([
+        msg["text"] for msg in conversation_history 
+        if msg.get("sender") == "scammer"
+    ])
+    full_text = message_text + " " + scammer_only
+    text_lower = full_text.lower()
+    
+    new_markers = []
+    
+    # ===== SCAM PATTERN DETECTION (Industry Standard) =====
+    
+    # 1. Account Threat (HIGH CONFIDENCE)
+    if re.search(r'(block|suspend|freeze|close|deactivat).{0,30}(account|card|upi)', text_lower):
+        new_markers.append(("account_threat", 1.0))
+    
+    # 2. Urgency Tactics (MEDIUM CONFIDENCE)
+    if re.search(r'(urgent|immediately|asap|hurry|quick|fast|now|today)', text_lower):
+        new_markers.append(("urgency", 0.5))
+    
+    # 3. KYC Phishing (HIGH CONFIDENCE)
+    if re.search(r'(verify|update|confirm|complete).{0,30}(kyc|pan|aadhar|documents?)', text_lower):
+        new_markers.append(("kyc_phishing", 1.0))
+    
+    # 4. Payment Request (HIGH CONFIDENCE)
+    if re.search(r'(pay|payment|deposit|transfer|send).{0,30}(money|amount|rs\.?|rupees?|\d+)', text_lower):
+        new_markers.append(("payment_request", 1.0))
+    
+    # 5. Link in Message (MEDIUM CONFIDENCE)
+    if re.search(r'(http://|https://|bit\.ly|tinyurl|goo\.gl|t\.co)', text_lower):
+        new_markers.append(("suspicious_link", 0.7))
+    
+    # 6. Authority Impersonation (HIGH CONFIDENCE)
+    if re.search(r'(bank|rbi|income tax|government|police|cyber|fraud|security)', text_lower):
+        new_markers.append(("authority_impersonation", 0.8))
+    
+    # 7. Prize/Lottery Scam (HIGH CONFIDENCE)
+    if re.search(r'(won|winner|prize|lottery|reward|congratulations?).{0,30}(lakh|crore|rs\.?)', text_lower):
+        new_markers.append(("prize_scam", 1.0))
+    
+    # 8. Credential Request (CRITICAL)
+    if re.search(r'(otp|password|pin|cvv|card number|account number)', text_lower):
+        new_markers.append(("credential_phishing", 1.5))
+    
+    # 9. Legal Threat (HIGH CONFIDENCE)
+    if re.search(r'(legal action|arrest|fine|penalty|court|case|fir)', text_lower):
+        new_markers.append(("legal_threat", 1.0))
+    
+    # Add markers to session (cumulative)
+    for indicator, confidence in new_markers:
+        session_manager.add_scam_marker(session_id, indicator, confidence)
+    
+    is_confirmed = session["scamDetectedFlag"]
+    total_markers = session["scamMarkersCumulative"]
+    
+    return is_confirmed, new_markers, total_markers
 
 
 def determine_scam_type(indicators):
@@ -1277,7 +1221,12 @@ def process_message_optimized(message_text, conversation_history, turn_number):
     print(f"\n🔍 Detection Analysis...")
 
     # Run detection (advisory only - doesn't block LLM)
-    is_scam, confidence, indicators = regex_scam_detection(message_text)
+    
+    # NEW: Cumulative scam detection (doesn't flip-flop)
+    full_history = session_manager.get_conversation_history(session_id)
+    is_scam, new_markers, total_markers = detect_scam_cumulative(session_id, message_text, full_history)
+    confidence = "HIGH" if total_markers >= 5 else "MEDIUM" if total_markers >= 3 else "LOW"
+
     print(f"   Advisory: {'Likely scam' if is_scam else 'Unclear'} | Confidence: {confidence} | Indicators: {indicators}")
 
     scam_type = determine_scam_type(indicators) if is_scam else "unknown"
@@ -1341,6 +1290,10 @@ class SessionManager:
                 "sessionId": session_id,
                 "conversationHistory": [],
                 "scamDetected": False,
+                "scamMarkersCumulative": 0.0,  # NEW: Cumulative score
+                "scamDetectedFlag": False,     # NEW: Persistent flag (never flips back)
+                "scamIndicatorsHistory": [],   # NEW: Track which indicators fired
+                "scammerType": "unknown",      # NEW: human|bot_primitive|bot_advanced
                 "detectionConfidence": "LOW",
                 "scamType": "unknown",
                 "accumulatedIntelligence": {
@@ -1377,6 +1330,45 @@ class SessionManager:
     def get_turn_count(self, session_id):
         self.create_session(session_id)
         return self.sessions[session_id]["turnCount"]
+
+    def add_scam_marker(self, session_id, indicator_name, confidence):
+        """
+        Add scam marker with cumulative logic.
+        Once scam is detected (3+ markers), flag stays True forever.
+        
+        Args:
+            session_id: Session identifier
+            indicator_name: Name of the scam pattern detected
+            confidence: Score weight (0.0-1.0)
+        
+        Returns:
+            bool: True if scam is confirmed (≥3 markers)
+        """
+        if session_id not in self.sessions:
+            self.create_session(session_id)
+        
+        session = self.sessions[session_id]
+        
+        # Record this indicator
+        session["scamIndicatorsHistory"].append({
+            "indicator": indicator_name,
+            "confidence": confidence,
+            "turn": session["turnCount"],
+            "timestamp": time.time()
+        })
+        
+        # Add to cumulative score
+        session["scamMarkersCumulative"] += confidence
+        
+        # CRITICAL: Once 3+ markers detected, flag STAYS True
+        if session["scamMarkersCumulative"] >= 3.0 and not session["scamDetectedFlag"]:
+            session["scamDetectedFlag"] = True
+            session["scamDetected"] = True  # Update old field too for compatibility
+            print(f"🚨 SCAM CONFIRMED: Session {session_id} at turn {session['turnCount']}")
+            print(f"   Total markers: {session['scamMarkersCumulative']:.1f}")
+        
+        return session["scamDetectedFlag"]
+
 
     def update_scam_status(self, session_id, is_scam, confidence, scam_type, reasoning=""):
         self.create_session(session_id)
@@ -2078,6 +2070,40 @@ def analytics():
         "activeNow": total_sessions
     }), 200
 
+@app.route('/session/<session_id>/scam-markers', methods=['GET'])
+def get_scam_markers(session_id):
+    """
+    Debug endpoint: View cumulative scam markers for a session.
+    Shows how scam detection accumulated over turns.
+    """
+    try:
+        # Check authentication
+        api_key = request.headers.get('x-api-key')
+        if api_key != API_SECRET_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+        
+        if not session_manager.session_exists(session_id):
+            return jsonify({"error": "Session not found"}), 404
+        
+        session = session_manager.sessions[session_id]
+        
+        return jsonify({
+            "status": "success",
+            "sessionId": session_id,
+            "scamDetectedFlag": session.get("scamDetectedFlag", False),
+            "totalMarkers": session.get("scamMarkersCumulative", 0.0),
+            "confidence": "HIGH" if session.get("scamMarkersCumulative", 0) >= 5 else "MEDIUM" if session.get("scamMarkersCumulative", 0) >= 3 else "LOW",
+            "indicatorsHistory": session.get("scamIndicatorsHistory", []),
+            "turnCount": session.get("turnCount", 0)
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
+                
 @app.route('/test-timing', methods=['GET'])
 def test_timing():
     """
