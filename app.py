@@ -1216,7 +1216,7 @@ def extract_entities_enhanced(text):
 # MAIN PROCESSING PIPELINE (LLM-First Approach)
 # ============================================================
 
-def process_message_optimized(message_text, conversation_history, turn_number):
+def process_message_optimized(session_id, message_text, conversation_history, turn_number):
     """Complete message processing pipeline - LLM handles ALL responses"""
 
     print(f"\n🔍 Detection Analysis...")
@@ -1224,8 +1224,13 @@ def process_message_optimized(message_text, conversation_history, turn_number):
     # Run detection (advisory only - doesn't block LLM)
     
     # NEW: Cumulative scam detection (doesn't flip-flop)
-    full_history = session_manager.get_conversation_history(session_id)
-    is_scam, new_markers, total_markers = detect_scam_cumulative(session_id, message_text, full_history)
+    # full_history is passed in from the caller (process_message)
+    is_scam, new_markers, total_markers = detect_scam_cumulative(
+        session_id,
+        message_text,
+        conversation_history
+    )
+
     confidence = "HIGH" if total_markers >= 5 else "MEDIUM" if total_markers >= 3 else "LOW"
 
     print(f"   Advisory: {'Likely scam' if is_scam else 'Unclear'} | Confidence: {confidence} | Indicators: {indicators}")
@@ -1711,7 +1716,13 @@ def process_message(request_data):
 
         # Process message with enhanced detection
         full_history = session_manager.get_conversation_history(session_id)
-        result = process_message_optimized(current_message, full_history[:-1], turn_count)
+        result = process_message_optimized(
+            session_id=session_id,
+            message_text=current_message,
+            conversation_history=full_history[:-1],  # everything before the latest message
+            turn_number=turn_count
+        )
+
 
         # Update session with results
         if result["isScam"]:
