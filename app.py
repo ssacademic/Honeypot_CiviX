@@ -1284,12 +1284,9 @@ def process_message_optimized(session_id, message_text, conversation_history, tu
 
     print(f"\n🔍 Detection Analysis...")
 
-    # Run detection (advisory only - doesn't block LLM)
-    
-    # NEW: Cumulative scam detection (doesn't flip-flop)
-    # full_history is passed in from the caller (process_message)
-
-                            # NEW: Cumulative scam detection
+    # ============================================================
+    # CUMULATIVE SCAM DETECTION
+    # ============================================================
     is_scam, new_markers, total_markers = detect_scam_cumulative(
         session_id,
         message_text,
@@ -1310,7 +1307,9 @@ def process_message_optimized(session_id, message_text, conversation_history, tu
     if current_indicators:
         print(f"   New markers detected: {', '.join(current_indicators)}")
     
-    # Determine scam type based on all known indicators
+    # ============================================================
+    # SCAM TYPE DETERMINATION
+    # ============================================================
     # Combine historical indicators + new ones
     session = session_manager.sessions[session_id]
     history_indicators = [h["indicator"] for h in session.get("scamIndicatorsHistory", [])]
@@ -1319,6 +1318,9 @@ def process_message_optimized(session_id, message_text, conversation_history, tu
     scam_type = determine_scam_type(all_indicators) if is_scam else "unknown"
     language = detect_language(message_text)
     
+    # ============================================================
+    # ENTITY EXTRACTION
+    # ============================================================
     # Extract entities from full conversation
     full_text = message_text + " " + " ".join([msg["text"] for msg in conversation_history])
     entities = extract_entities_enhanced(full_text)
@@ -1326,14 +1328,48 @@ def process_message_optimized(session_id, message_text, conversation_history, tu
     # Store indicators list for downstream use (e.g., dashboard)
     entities["keywords"] = all_indicators
 
-
     print(f"📊 Extracted: {len(entities['bankAccounts'])} banks, {len(entities['upiIds'])} UPIs, {len(entities['phoneNumbers'])} phones, {len(entities.get('emails', []))} emails")
 
+    # ============================================================
+    # GENERATE LLM RESPONSE (NEW - MUST HAPPEN BEFORE RETURN)
+    # ============================================================
+    print(f"💬 Generating LLM response (Turn {turn_number})...")
+    
+    try:
+        agent_reply = generate_response_groq(
+            message_text=message_text,
+            conversation_history=conversation_history,
+            turn_number=turn_number,
+            scam_type=scam_type,
+            language=language
+        )
+        print(f"✅ LLM generated: {agent_reply[:50]}...")
+    
+    except Exception as e:
+        print(f"❌ LLM generation failed: {e}")
+        # Use smart fallback
+        contacts_found = {
+            "phone": len(entities.get("phoneNumbers", [])) > 0,
+            "email": len(entities.get("emails", [])) > 0,
+            "UPI": len(entities.get("upiIds", [])) > 0,
+            "link": len(entities.get("phishingLinks", [])) > 0
+        }
+        agent_reply = generate_smart_fallback(
+            message_text,
+            conversation_history,
+            turn_number,
+            contacts_found
+        )
+        print(f"✅ Using fallback: {agent_reply[:50]}...")
+
+    # ============================================================
+    # RETURN RESULT (agent_reply now exists)
+    # ============================================================
     return {
-        "isScam": is_scam,  # Track for analytics
+        "isScam": is_scam,
         "confidence": confidence,
         "scamType": scam_type,
-        "agentReply": agent_reply,  # ✅ ALWAYS from LLM!
+        "agentReply": agent_reply,  # ✅ Now safe!
         "extractedEntities": entities
     }
 
