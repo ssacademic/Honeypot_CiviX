@@ -291,7 +291,7 @@ class MultiProviderLLM:
             print(f"    └─ {available}/{len(tier['providers'])} providers available")
         print("="*60 + "\n")
     
-    def _call_gemini(self, client, model, system_prompt, user_prompt, key_num, temperature=0.9, max_tokens=100):
+    def call_gemini(self, client, model, system_prompt, user_prompt, key_num, temperature=0.9, max_tokens=100):
         """
         Call Gemini API using NEW SDK format
         
@@ -338,7 +338,7 @@ class MultiProviderLLM:
                 raise Exception("429_RATE_LIMIT")
             raise e
     
-    def _call_groq(self, api_key, model, system_prompt, user_prompt, key_num, temperature=0.9, max_tokens=100):
+    def call_groq(self, api_key, model, system_prompt, user_prompt, key_num, temperature=0.9, max_tokens=100):
         """Call Groq API (unchanged)"""
         try:
             if api_key is None:
@@ -380,7 +380,7 @@ class MultiProviderLLM:
                 raise Exception("429_RATE_LIMIT")
             raise e
 
-    def _call_openai(self, api_key, model, system_prompt, user_prompt, keynum, temperature=0.9, max_tokens=100):
+    def call_openai(self, api_key, model, system_prompt, user_prompt, keynum, temperature=0.9, max_tokens=100):
         """
         Call OpenAI API (gpt-5-mini, gpt-4.1-mini)
         Uses same interface as Gemini/Groq for consistency
