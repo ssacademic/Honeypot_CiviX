@@ -270,9 +270,9 @@ class MultiProviderLLM:
         self.stats = {
             "total_calls": 0,
             "tier0_success": 0,
-            "tier_1_success": 0,
-            "tier_2_success": 0,
-            "tier_3_success": 0,
+            "tier1_success": 0,
+            "tier2_success": 0,
+            "tier3_success": 0,
             "total_429_errors": 0,
             "total_failures": 0,
             "openai_calls": 0,
@@ -455,11 +455,11 @@ class MultiProviderLLM:
                     continue
                     
                 if provider["type"] == "gemini" and provider.get("client") is None:
-                    print(f"⏭️ Skipping Gemini Key {provider['key_num']} (not configured)")
+                    print(f"⏭️ Skipping Gemini Key {provider['keynum']} (not configured)")
                     continue
                 
                 if provider["type"] == "groq" and provider.get("key") is None:
-                    print(f"⏭️ Skipping Groq Key {provider['key_num']} (not configured)")
+                    print(f"⏭️ Skipping Groq Key {provider['keynum']} (not configured)")
                     continue
                 
                 provider_name = f"{provider['type'].upper()}/{provider['model']} (Key {provider['keynum']})"
@@ -501,12 +501,12 @@ class MultiProviderLLM:
                             self.stats["tier3_success"] += 1
                     
                                         
-                    print(f"✅ Success via {tier_name} (Key {provider['key_num']}) in {elapsed:.2f}s")
+                    print(f"✅ Success via {tier_name} (Key {provider['keynum']}) in {elapsed:.2f}s")
                     
                     return response, {
                         "tier": tier_name,
                         "provider": provider_name,
-                        "key_num": provider["key_num"],
+                        "keynum": provider["keynum"],
                         "elapsed_time": elapsed,
                         "total_attempt": tier_idx * len(providers) + attempt + 1
                     }
@@ -541,9 +541,9 @@ class MultiProviderLLM:
             # Calculate success rates
             total = stats["total_calls"]
             if total > 0:
-                stats["tier_1_success_rate"] = f"{(stats['tier_1_success'] / total * 100):.1f}%"
-                stats["tier_2_success_rate"] = f"{(stats['tier_2_success'] / total * 100):.1f}%"
-                stats["tier_3_success_rate"] = f"{(stats['tier_3_success'] / total * 100):.1f}%"
+                stats["tier1_success_rate"] = f"{(stats['tier_1_success'] / total * 100):.1f}%"
+                stats["tier2_success_rate"] = f"{(stats['tier_2_success'] / total * 100):.1f}%"
+                stats["tier3_success_rate"] = f"{(stats['tier_3_success'] / total * 100):.1f}%"
                 stats["overall_success_rate"] = f"{((total - stats['total_failures']) / total * 100):.1f}%"
             
             return stats
