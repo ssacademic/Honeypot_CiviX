@@ -207,19 +207,19 @@ class MultiProviderLLM:
         self.lock = Lock()
         
         # Initialize Gemini clients (one per key)
-        self.gemini_client_1 = None
-        self.gemini_client_2 = None
+        self.gemini_client1 = None
+        self.gemini_client2 = None
         
         if GEMINI_API_KEY_1:
             try:
-                self.gemini_client_1 = genai.Client(api_key=GEMINI_API_KEY_1)
+                self.gemini_client1 = genai.Client(api_key=GEMINI_API_KEY_1)
                 print("✅ Gemini Client 1 initialized")
             except Exception as e:
                 print(f"⚠️ Gemini Client 1 failed: {e}")
         
         if GEMINI_API_KEY_2:
             try:
-                self.gemini_client_2 = genai.Client(api_key=GEMINI_API_KEY_2)
+                self.gemini_client2 = genai.Client(api_key=GEMINI_API_KEY_2)
                 print("✅ Gemini Client 2 initialized")
             except Exception as e:
                 print(f"⚠️ Gemini Client 2 failed: {e}")
