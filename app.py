@@ -230,8 +230,8 @@ class MultiProviderLLM:
             {
                 "name": "Tier 0 - OpenAI GPT",
                 "providers": [
-                    {"type": "openai", "key": CHAT_API_KEY, "model": "gpt-5-mini", "keynum": 1},
-                    {"type": "openai", "key": CHAT_API_KEY, "model": "gpt-4.1-mini", "keynum": 2}
+                    {"type": "openai", "key": CHAT_API_KEY, "model": "gpt-4.1-mini", "keynum": 1},
+                    {"type": "openai", "key": CHAT_API_KEY, "model": "gpt-4o-mini", "keynum": 2}
                 ],
                 "currentindex": 0
             },
@@ -541,6 +541,7 @@ class MultiProviderLLM:
             # Calculate success rates
             total = stats["total_calls"]
             if total > 0:
+                stats["tier0_success_rate"] = f"{(stats['tier0_success'] / total * 100):.1f}%"
                 stats["tier1_success_rate"] = f"{(stats['tier_1_success'] / total * 100):.1f}%"
                 stats["tier2_success_rate"] = f"{(stats['tier_2_success'] / total * 100):.1f}%"
                 stats["tier3_success_rate"] = f"{(stats['tier_3_success'] / total * 100):.1f}%"
