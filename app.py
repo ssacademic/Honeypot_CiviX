@@ -4,7 +4,7 @@
 # ============================================================
 
 print("\n" + "="*80)
-print("🚀 HONEYPOT SCAM DETECTION SYSTEM V8")
+print("🚀 HONEYPOT SCAM DETECTION SYSTEM V6")
 
 
 print("="*80 + "\n")
@@ -35,9 +35,6 @@ from groq import Groq
 import random  # NEW
 
 
-def printf(msg):
-    """Helper function for formatted printing"""
-    print(msg, flush=True)
 # ============================================================
 # REQUEST VELOCITY CONTROL (Smart Rate Limiting - FIXED)
 # ============================================================
@@ -692,7 +689,8 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
         new_markers.append(("document_phishing", 1.0))
     
     # 15. Link to verify (bidirectional)
-    if re.search(r'(click|visit|go to|open).{0,40}(link|url|website|portal)', text_lower) and re.search(r'(verify|confirm|update|check)', text_lower):
+    if re.search(r'(click|visit|go to|open).{0,40}(link|url|website|portal)', text_lower) and \
+       re.search(r'(verify|confirm|update|check)', text_lower):
         new_markers.append(("link_verification_scam", 1.3))
     
     # ===== CATEGORY 4: CREDENTIAL HARVESTING (5 markers) =====
@@ -1671,47 +1669,6 @@ def extract_entities_enhanced(text):
             bank_names_unique.append(name)
     
     entities['bankNames'] = bank_names_unique
-
-    #--
-        # ===== EXTRACT ACTUAL SUSPICIOUS KEYWORDS (NEW!) =====
-    
-    suspicious_keyword_patterns = [
-        # Urgency
-        'urgent', 'immediately', 'asap', 'hurry', 'quick', 'now', 'today',
-        'expire', 'expires', 'deadline', 'last chance', 'final warning',
-        # Threats
-        'block', 'blocked', 'suspend', 'suspended', 'freeze', 'frozen',
-        'close', 'closed', 'terminate', 'deactivate', 'lock', 'locked',
-        # Verification
-        'verify', 'confirm', 'validate', 'authenticate', 'update', 'complete',
-        # Credentials
-        'otp', 'password', 'pin', 'cvv', 'account number', 'card number',
-        # Authority
-        'bank', 'police', 'government', 'rbi', 'income tax', 'cyber cell',
-        'fraud department', 'security team', 'customer care', 'sbi', 'hdfc',
-        'icici', 'paytm', 'phonepe', 'googlepay',
-        # Scams
-        'prize', 'won', 'winner', 'lottery', 'cashback', 'refund',
-        'congratulations', 'selected', 'reward',
-        # Payment
-        'pay', 'payment', 'transfer', 'deposit', 'send money',
-        # Links
-        'click', 'visit', 'link', 'website', 'portal',
-        # Emergency
-        'emergency', 'accident', 'hospital', 'critical', 'help'
-    ]
-    
-    found_keywords = []
-    for keyword in suspicious_keyword_patterns:
-        if keyword in text_lower:
-            found_keywords.append(keyword)
-    
-    # Deduplicate and limit to top 10
-    entities['suspiciousKeywords'] = list(set(found_keywords))[:10]
-    
-    return entities
-
-
     
     return entities
 
@@ -2598,133 +2555,56 @@ def get_session_entities(session_id):
 # ============================================================
 
 def send_final_callback_to_guvi(session_id):
-    """Send final intelligence to GUVI - WITH IMPROVED AGENT NOTES"""
+    """
+    Send final intelligence to GUVI - WITH IMPROVED ERROR HANDLING
     
+    This is called when:
+    - Max turns reached (turn >= 10)
+    - Sufficient intelligence extracted
+    - Conversation naturally ended
+    """
     try:
         if not session_manager.session_exists(session_id):
-            printf(f"Cannot send callback: Session {session_id} not found")
+            print(f"❌ Cannot send callback: Session {session_id} not found")
             return False
         
-        session = session_manager.sessions[session_id]
-        
-        # Check if already sent
-        if session.get('callbackSent', False):
-            printf(f"Callback already sent for session {session_id}")
-            return True
-        
         # Get session data
-        summary = session_manager.get_session_summary(session_id)
+        session = session_manager.sessions[session_id]
         intelligence = session_manager.get_accumulated_intelligence(session_id)
+        summary = session_manager.get_session_summary(session_id)
         
-        # ===== GENERATE MEANINGFUL AGENT NOTES =====
-        
-        def generate_agent_notes(session, intelligence):
-            """Generate professional, meaningful agent notes"""
-            
-            notes_parts = []
-            
-            # 1. Scam type description
-            scam_type = session.get('scamType', 'unknown')
-            scam_descriptions = {
-                'lottery_scam': 'Prize/lottery scam detected',
-                'kyc_fraud': 'KYC phishing attempt',
-                'payment_demand': 'Payment demand scam',
-                'prize_lottery_scam': 'Prize notification scam',
-                'bank_fraud': 'Bank impersonation fraud',
-                'upi_fraud': 'UPI/payment fraud attempt',
-                'phishing': 'Phishing attack detected',
-                'unknown': 'Scam detected'
-            }
-            
-            notes_parts.append(scam_descriptions.get(scam_type, f"Scam type: {scam_type}"))
-            
-            # 2. Authority impersonation
-            keywords = intelligence.get('suspiciousKeywords', [])
-            authorities = ['bank', 'sbi', 'hdfc', 'icici', 'axis', 'kotak',
-                          'police', 'government', 'rbi', 'paytm', 'phonepe', 'googlepay']
-            
-            found_authorities = [auth for auth in authorities 
-                               if any(auth in str(kw).lower() for kw in keywords)]
-            
-            if found_authorities:
-                notes_parts.append(f"Impersonating {', '.join(set(found_authorities))}")
-            
-            # 3. Tactics used
-            tactics = []
-            urgency_words = ['urgent', 'immediately', 'asap', 'hurry', 'now', 'expire']
-            threat_words = ['block', 'suspend', 'freeze', 'close', 'arrest', 'locked']
-            credential_words = ['otp', 'password', 'pin', 'cvv']
-            
-            if any(word in str(keywords).lower() for word in urgency_words):
-                tactics.append('urgency tactics')
-            if any(word in str(keywords).lower() for word in threat_words):
-                tactics.append('threatening language')
-            if any(word in str(keywords).lower() for word in credential_words):
-                tactics.append('credential harvesting')
-            
-            if tactics:
-                notes_parts.append(f"Used {', '.join(tactics)}")
-            
-            # 4. Intelligence extracted
-            intel_summary = []
-            if intelligence.get('phoneNumbers'):
-                intel_summary.append(f"{len(intelligence['phoneNumbers'])} phone(s)")
-            if intelligence.get('upiIds'):
-                intel_summary.append(f"{len(intelligence['upiIds'])} UPI ID(s)")
-            if intelligence.get('bankAccounts'):
-                intel_summary.append(f"{len(intelligence['bankAccounts'])} account(s)")
-            if intelligence.get('phishingLinks'):
-                intel_summary.append(f"{len(intelligence['phishingLinks'])} link(s)")
-            if intelligence.get('emails'):
-                intel_summary.append(f"{len(intelligence['emails'])} email(s)")
-            
-            if intel_summary:
-                notes_parts.append(f"Extracted: {', '.join(intel_summary)}")
-            
-            # 5. Engagement summary
-            turn_count = session.get('turnCount', 0)
-            notes_parts.append(f"{turn_count} turns of engagement")
-            
-            return ". ".join(notes_parts) + "."
-        
-        # Generate improved notes
-        agent_notes = generate_agent_notes(session, intelligence)
-        
-        # ===== BUILD PAYLOAD WITH IMPROVED OUTPUT =====
-        
+        # Prepare payload
         payload = {
             "sessionId": session_id,
-            "scamDetected": session.get('scamDetected', False),
-            "totalMessagesExchanged": summary['totalMessages'],
+            "scamDetected": session.get("scamDetected", False),
+            "totalMessagesExchanged": summary["totalMessages"],
             "extractedIntelligence": {
-                "bankAccounts": intelligence.get('bankAccounts', []),
-                "upiIds": intelligence.get('upiIds', []),
-                "phishingLinks": intelligence.get('phishingLinks', []),
-                "phoneNumbers": intelligence.get('phoneNumbers', []),
-                "emailAddresses": intelligence.get('emails', []),
-                "suspiciousKeywords": intelligence.get('suspiciousKeywords', [])
+                "bankAccounts": intelligence.get("bankAccounts", []),
+                "upiIds": intelligence.get("upiIds", []),
+                "phishingLinks": intelligence.get("phishingLinks", []),
+                "phoneNumbers": intelligence.get("phoneNumbers", []),
+                "emailAddresses": intelligence.get("emails", []),
+                "suspiciousKeywords": intelligence.get("suspiciousKeywords", [])
             },
             "engagementMetrics": {
-                "totalMessagesExchanged": summary['totalMessages'],
-                "engagementDurationSeconds": int(summary['duration'])
+                "totalMessagesExchanged": summary["totalMessages"],
+                "engagementDurationSeconds": int(summary["duration"])
             },
-            "agentNotes": agent_notes
+            "agentNotes": summary.get("agentNotes", "Intelligence extraction completed")
         }
         
-        printf("="*80)
-        printf("SENDING FINAL CALLBACK TO GUVI")
-        printf("="*80)
-        printf(f"Session ID: {session_id}")
-        printf(f"Scam Detected: {payload['scamDetected']}")
-        printf(f"Total Messages: {payload['totalMessagesExchanged']}")
-        printf("Entities Extracted:")
-        printf(f"  - Bank Accounts: {len(payload['extractedIntelligence']['bankAccounts'])}")
-        printf(f"  - UPI IDs: {len(payload['extractedIntelligence']['upiIds'])}")
-        printf(f"  - Phone Numbers: {len(payload['extractedIntelligence']['phoneNumbers'])}")
-        printf(f"  - Phishing Links: {len(payload['extractedIntelligence']['phishingLinks'])}")
-        printf(f"  - Suspicious Keywords: {len(payload['extractedIntelligence']['suspiciousKeywords'])}")
-        printf(f"Agent Notes: {agent_notes[:100]}...")
-        printf("="*80)
+        print(f"\n{'='*80}")
+        print(f"📤 SENDING FINAL CALLBACK TO GUVI")
+        print(f"{'='*80}")
+        print(f"Session ID: {session_id}")
+        print(f"Scam Detected: {payload['scamDetected']}")
+        print(f"Total Messages: {payload['totalMessagesExchanged']}")
+        print(f"Entities Extracted:")
+        print(f"  - Bank Accounts: {len(payload['extractedIntelligence']['bankAccounts'])}")
+        print(f"  - UPI IDs: {len(payload['extractedIntelligence']['upiIds'])}")
+        print(f"  - Phone Numbers: {len(payload['extractedIntelligence']['phoneNumbers'])}")
+        print(f"  - Phishing Links: {len(payload['extractedIntelligence']['phishingLinks'])}")
+        print(f"{'='*80}\n")
         
         # Send to GUVI
         response = requests.post(
@@ -2734,23 +2614,25 @@ def send_final_callback_to_guvi(session_id):
         )
         
         if response.status_code == 200:
-            printf(f"✅ GUVI Callback successful: {response.status_code}")
-            session['callbackSent'] = True
-            session['callbackTime'] = time.time()
+            print(f"✅ GUVI Callback successful: {response.status_code}")
+            # Mark session as callback sent
+            session_manager.sessions[session_id]["callback_sent"] = True
+            session_manager.sessions[session_id]["callback_time"] = time.time()
             return True
         else:
-            printf(f"❌ GUVI Callback failed: {response.status_code}")
-            printf(f"Response: {response.text[:200]}")
+            print(f"⚠️ GUVI Callback failed: {response.status_code}")
+            print(f"Response: {response.text[:200]}")
             return False
             
     except requests.exceptions.Timeout:
-        printf("❌ GUVI Callback timeout (10s exceeded)")
+        print(f"⚠️ GUVI Callback timeout (10s exceeded)")
         return False
     except Exception as e:
-        printf(f"❌ GUVI Callback error: {str(e)}")
+        print(f"❌ GUVI Callback error: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
+
 
 # ============================================================
 # UTILITY ENDPOINTS
