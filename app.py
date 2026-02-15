@@ -2483,18 +2483,139 @@ def get_session_entities(session_id):
             "error": str(e)
         }), 500
 
+
+# ============================================================
+# NEW FUNCTION: Generate Rich Agent Notes
+# Location: Add before send_final_callback_to_guvi() (~line 1900)
+# ============================================================
+
+def generate_rich_agent_notes(session_id):
+    """
+    Generate enhanced agent notes with timeline, tactics, and intelligence summary.
+    
+    This provides evaluators with rich context beyond just a list of indicators.
+    
+    Returns:
+        str: Multi-part agent notes separated by " | "
+        
+    Example output:
+        "Scam type: bank_fraud (confidence: HIGH) | Detected at turn 1 | 
+         Tactics: account_threat, credential_phishing, urgency | 
+         Extracted: 1 phones, 1 accounts, 1 upis, 1 links"
+    """
+    if not session_manager.session_exists(session_id):
+        return "Intelligence extraction completed"
+    
+    session = session_manager.sessions[session_id]
+    intel = session_manager.get_accumulated_intelligence(session_id)
+    
+    notes = []
+    
+    # ============================================================
+    # PART 1: Scam Classification
+    # ============================================================
+    scam_type = session.get("scamType", "unknown")
+    confidence = session.get("detectionConfidence", "LOW")
+    notes.append(f"Scam type: {scam_type} (confidence: {confidence})")
+    
+    # ============================================================
+    # PART 2: Detection Timeline
+    # ============================================================
+    indicators = session.get("scamIndicatorsHistory", [])
+    if indicators:
+        # Find when scam was first detected
+        first_turn = indicators[0].get("turn", 1)
+        notes.append(f"Detected at turn {first_turn}")
+    
+    # ============================================================
+    # PART 3: Scam Tactics Summary
+    # ============================================================
+    if indicators:
+        # Get unique indicators in chronological order
+        seen = set()
+        ordered_tactics = []
+        for indicator_obj in sorted(indicators, key=lambda x: x.get("turn", 0)):
+            indicator = indicator_obj["indicator"]
+            if indicator not in seen:
+                ordered_tactics.append(indicator)
+                seen.add(indicator)
+        
+        # Limit to top 5 tactics for readability
+        top_tactics = ordered_tactics[:5]
+        if len(ordered_tactics) > 5:
+            tactics_str = ", ".join(top_tactics) + f" (+{len(ordered_tactics)-5} more)"
+        else:
+            tactics_str = ", ".join(top_tactics)
+        
+        notes.append(f"Tactics: {tactics_str}")
+    
+    # ============================================================
+    # PART 4: Intelligence Extraction Summary
+    # ============================================================
+    entity_counts = []
+    
+    phone_count = len(intel.get("phoneNumbers", []))
+    if phone_count > 0:
+        entity_counts.append(f"{phone_count} phone{'s' if phone_count != 1 else ''}")
+    
+    account_count = len(intel.get("bankAccounts", []))
+    if account_count > 0:
+        entity_counts.append(f"{account_count} account{'s' if account_count != 1 else ''}")
+    
+    upi_count = len(intel.get("upiIds", []))
+    if upi_count > 0:
+        entity_counts.append(f"{upi_count} upi{'s' if upi_count != 1 else ''}")
+    
+    link_count = len(intel.get("phishingLinks", []))
+    if link_count > 0:
+        entity_counts.append(f"{link_count} link{'s' if link_count != 1 else ''}")
+    
+    email_count = len(intel.get("emails", []))
+    if email_count > 0:
+        entity_counts.append(f"{email_count} email{'s' if email_count != 1 else ''}")
+    
+    if entity_counts:
+        notes.append(f"Extracted: {', '.join(entity_counts)}")
+    else:
+        notes.append("No entities extracted")
+    
+    # ============================================================
+    # PART 5: Conversation Quality Metrics (Optional)
+    # ============================================================
+    turn_count = session.get("turnCount", 0)
+    if turn_count >= 8:
+        notes.append(f"Extended engagement: {turn_count} turns")
+    
+    # ============================================================
+    # Combine all parts with separator
+    # ============================================================
+    return " | ".join(notes)
+
+
+
 # ============================================================
 # FIXED: SEND GUVI CALLBACK (Uses correct key names)
 # ============================================================
 
+# ============================================================
+# IMPROVED VERSION - send_final_callback_to_guvi()
+# Changes: Added engagementDurationSeconds, scamType, rich agentNotes
+# ============================================================
+
 def send_final_callback_to_guvi(session_id):
     """
-    Send final intelligence to GUVI - WITH IMPROVED ERROR HANDLING
+    Send final intelligence to GUVI - IMPROVED VERSION
     
     This is called when:
     - Max turns reached (turn >= 10)
     - Sufficient intelligence extracted
     - Conversation naturally ended
+    
+    IMPROVEMENTS:
+    1. ✅ Added engagementDurationSeconds (+10 pts)
+    2. ✅ Added scamType for context
+    3. ✅ Enhanced agentNotes with rich context
+    4. ✅ Proper engagementMetrics structure
     """
     try:
         if not session_manager.session_exists(session_id):
@@ -2506,10 +2627,23 @@ def send_final_callback_to_guvi(session_id):
         intelligence = session_manager.get_accumulated_intelligence(session_id)
         summary = session_manager.get_session_summary(session_id)
         
-        # Prepare payload
+        # ============================================================
+        # NEW: Calculate engagement duration
+        # ============================================================
+        duration_seconds = int(time.time() - session["startTime"])
+        
+        # ============================================================
+        # NEW: Generate rich agent notes
+        # ============================================================
+        agent_notes = generate_rich_agent_notes(session_id)
+        
+        # ============================================================
+        # IMPROVED: Prepare payload with all required fields
+        # ============================================================
         payload = {
             "sessionId": session_id,
             "scamDetected": session.get("scamDetected", False),
+            "scamType": session.get("scamType", "unknown"),  # ✅ ADDED
             "totalMessagesExchanged": summary["totalMessages"],
             "extractedIntelligence": {
                 "bankAccounts": intelligence.get("bankAccounts", []),
@@ -2519,7 +2653,11 @@ def send_final_callback_to_guvi(session_id):
                 "emailAddresses": intelligence.get('emails', []),
                 "suspiciousKeywords": intelligence.get("suspiciousKeywords", [])
             },
-            "agentNotes": summary.get("agentNotes", "Intelligence extraction completed")
+            "engagementMetrics": {  # ✅ NEW OBJECT
+                "totalMessagesExchanged": summary["totalMessages"],
+                "engagementDurationSeconds": duration_seconds  # ✅ CRITICAL
+            },
+            "agentNotes": agent_notes  # ✅ ENHANCED
         }
         
         print(f"\n{'='*80}")
@@ -2527,12 +2665,15 @@ def send_final_callback_to_guvi(session_id):
         print(f"{'='*80}")
         print(f"Session ID: {session_id}")
         print(f"Scam Detected: {payload['scamDetected']}")
+        print(f"Scam Type: {payload['scamType']}")  # ✅ NEW
         print(f"Total Messages: {payload['totalMessagesExchanged']}")
+        print(f"Duration: {duration_seconds}s")  # ✅ NEW
         print(f"Entities Extracted:")
         print(f"  - Bank Accounts: {len(payload['extractedIntelligence']['bankAccounts'])}")
         print(f"  - UPI IDs: {len(payload['extractedIntelligence']['upiIds'])}")
         print(f"  - Phone Numbers: {len(payload['extractedIntelligence']['phoneNumbers'])}")
         print(f"  - Phishing Links: {len(payload['extractedIntelligence']['phishingLinks'])}")
+        print(f"Agent Notes: {agent_notes[:100]}...")  # ✅ PREVIEW
         print(f"{'='*80}\n")
         
         # Send to GUVI
@@ -2561,8 +2702,6 @@ def send_final_callback_to_guvi(session_id):
         import traceback
         traceback.print_exc()
         return False
-
-
 # ============================================================
 # UTILITY ENDPOINTS
 # ============================================================
