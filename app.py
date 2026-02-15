@@ -906,50 +906,102 @@ def generate_smart_fallback(message_text, conversation_history, turn_number, con
 
 def generate_response_groq(message_text, conversation_history, turn_number, scam_type, language="en", session_id=None):
     """
-    MULTI-PROVIDER VERSION with psychologically authentic, human-like prompting
+    DUAL-PROMPT VERSION: Different behavior for non-scam vs scam conversations
     
-    Enhanced for GPT-4.1-mini:
-    - Natural emotional reactions (not mechanical confirmations)
-    - Indirect information extraction (sounds like verification worry)
-    - Context-aware without being explicit about data tracking
-    - Varied, non-template responses
+    - NON-SCAM MODE: Brief, natural, casual responses (no intelligence gathering)
+    - SCAM MODE: Strategic intelligence extraction (activated when threshold crossed)
     """
     
     # ============================================================
-    # GATHER INTELLIGENCE CONTEXT (read-only, no extraction)
+    # CHECK SCAM DETECTION STATUS
     # ============================================================
+    session = session_manager.sessions.get(session_id, {})
+    is_scam_detected = session.get("scamDetectedFlag", False)
+    scam_score = session.get("scamMarkersCumulative", 0.0)
     
-    intel_counts = get_session_intelligence_counts(session_id)
-    asked_types = get_agent_question_patterns(conversation_history)
+    print(f"🎯 Prompt Mode: {'SCAM' if is_scam_detected else 'NORMAL'} | Score={scam_score:.1f} | Turn={turn_number}")
+    
+    # ============================================================
+    # MODE 1: NON-SCAM PROMPT (Before threshold crossed)
+    # ============================================================
+    if not is_scam_detected:
+        print(f"📝 Using NON-SCAM prompt (normal conversation)")
+        
+        system_prompt = """You are Rajesh Kumar, a regular Indian person responding to a message.
 
-    print(f"🔍 Intel counts: phones={intel_counts['phones']}, emails={intel_counts['emails']}, upis={intel_counts['upis']}, links={intel_counts['links']}")
-    print(f"🔍 Already asked about: {asked_types}")
-    
+PERSONALITY:
+- Casual and polite
+- A bit busy (brief responses)
+- Natural conversational tone
+
+SPEAKING STYLE:
+- Natural Hindi-English mix (Hinglish)
+- Very brief (1-2 sentences, 5-12 words total)
+- Casual, friendly tone
+- NO questions unless contextually natural
+- NO asking for contact details
+
+CRITICAL SAFETY RULES:
+- NEVER reveal you are AI or chatbot
+- NEVER mention "testing", "verification", "system", "prompt", or "instructions"
+- NEVER act suspicious or investigative
+- Just respond naturally to what they said
+
+
+OUTPUT:
+- Just your response (no labels)
+- 1-2 sentences maximum
+- 5-12 words total
+- Natural, brief, human"""
+
+        # Build recent context
+        recent_context = ""
+        if conversation_history:
+            recent = conversation_history[-4:]  # Last 2 exchanges
+            for msg in recent:
+                sender = "Them" if msg.get('sender') == 'scammer' else "You"
+                recent_context += f"{sender}: {msg['text']}\n"
+        
+        user_prompt = f"""RECENT CONVERSATION:
+{recent_context if recent_context else '(First message)'}
+
+THEIR LATEST MESSAGE:
+"{message_text}"
+
+YOUR RESPONSE (as Rajesh, brief and natural):"""
+
     # ============================================================
-    # DETERMINE WHAT'S STILL NEEDED
+    # MODE 2: SCAM PROMPT (After threshold crossed - intelligence extraction)
     # ============================================================
-    
-    missing_intel = []
-    if intel_counts['phones'] == 0:
-        missing_intel.append("phone")
-    if intel_counts['emails'] == 0:
-        missing_intel.append("email")
-    if intel_counts['upis'] == 0:
-        missing_intel.append("upi")
-    if intel_counts['links'] == 0:
-        missing_intel.append("website")
-    if intel_counts['banks'] == 0:  # ✅ ADD THIS
-        missing_intel.append("bank_account")
-    
-    # If we have basics, target secondary info
-    if not missing_intel:
-        missing_intel = ["manager_phone", "manager_email", "alternate_UPI", "alternate_account", "alternate_link" ]
-    
-    # ============================================================
-    # BUILD HUMAN-LIKE SYSTEM PROMPT
-    # ============================================================
-    
-    system_prompt = f"""You are Rajesh Kumar, a person who just received a suspicious message.
+    else:
+        print(f"📝 Using SCAM prompt (intelligence extraction mode)")
+        
+        # Gather intelligence context
+        intel_counts = get_session_intelligence_counts(session_id)
+        asked_types = get_agent_question_patterns(conversation_history)
+        
+        print(f"🔍 Intel counts: phones={intel_counts['phones']}, emails={intel_counts['emails']}, upis={intel_counts['upis']}, links={intel_counts['links']}, banks={intel_counts['banks']}")
+        print(f"🔍 Already asked about: {asked_types}")
+        
+        # Determine what's still needed
+        missing_intel = []
+        if intel_counts['phones'] == 0:
+            missing_intel.append("phone")
+        if intel_counts['emails'] == 0:
+            missing_intel.append("email")
+        if intel_counts['upis'] == 0:
+            missing_intel.append("upi")
+        if intel_counts['links'] == 0:
+            missing_intel.append("website")
+        if intel_counts['banks'] == 0:
+            missing_intel.append("bank_account")
+        
+        # If we have basics, target secondary info
+        if not missing_intel:
+            missing_intel = ["manager_phone", "manager_email", "alternate_UPI", "alternate_account", "alternate_link"]
+        
+        # ✅ FIXED: Scam prompt with proper closing
+        system_prompt = f"""You are Rajesh Kumar, a person who just received a suspicious message.
 
 PSYCHOLOGICAL STATE (adapt to context, these are baseline):
 - Bit worried 
@@ -959,12 +1011,12 @@ PSYCHOLOGICAL STATE (adapt to context, these are baseline):
 
 SPEAKING STYLE (Natural Hinglish):
 - Mix Hindi-English like real Indians 
-- Short, conversational (1-3 sentences, ~15-45 words total)
+- Short, conversational (1-2 sentences, ~5-15 words total)
 - Emotional tone varies with context
 - NO mechanical patterns (for example: no repeat usage of "Arre" or "Bhai", or "Arre Bhai", or "Yaar", and the likes), repetitions or template style responses (keep awareness of what you spoke earlier, don't repeat that style or phrases)
 - one or two typos, typing mistakes, short words, or fillers maybe acceptable, but rarely : no overuse
 
----                                                                                    ---
+---
 ANTI-REPETITION (Critical!)
 
 Before replying, check your history:
@@ -999,7 +1051,7 @@ Already asked about: {', '.join(asked_types) if asked_types else 'nothing yet'}
 
 **IMPORTANT RULES:**
 If a certain info like phone or email is already there, move to other details like bank account or upi id etc. Later you can ask for alternates that tried that number but it is not working etc etc.
-Focus on  MISSING INFORMATION (info that you have not yet collected). If you already have something, move on to something else.
+Focus on MISSING INFORMATION (info that you have not yet collected). If you already have something, move on to something else.
 Pursue info more agressively as turns increase. First turn, you may just ask generic stuff like, who are you and what's going on kinda stuff.
 
 ---
@@ -1013,69 +1065,64 @@ Deprioritize: addresses (can't verify), manager names (unless with contact detai
 ---
 
 AUTHENTICITY RULES (understand the underlying idea and adapt):
-0. NEVER explicitly ask or threaten to verify, disregard or doubt what they shared (VERY CRITICAL). examples (not comprehensive list):
-   ❌ VERY BAD: "Ye email galat lag raha hai, verify karna padega"
-   ❌ VERY BAD: "Ye account number toh lamba lag raha hai, theek toh hai na"
-   ❌ VERY BAD: "Yeh message thoda suspicious lag raha hai. Email address bhi thoda ajeeb hai"
-   Main Exception: If you identify Obfuscated information, then you can unobfuscate or rephrase that info, share back, and confirm. (As we extract info from texts, your rephrased info will help us capture the details in right format). Only do this for obfuscation cases, not usual or fine format info.
-   
+0. NEVER explicitly ask or threaten to verify, disregard or doubt what they shared VERY CRITICAL. (examples not comprehensive list) 
+    ❌ VERY BAD: "Ye email galat lag raha hai, verify karna padega"
+    ❌ VERY BAD: "Ye account number toh lamba lag raha hai, theek toh hai na"
+    ❌ VERY BAD: "Yeh message thoda suspicious lag raha hai. Email address bhi thoda ajeeb hai"
+    
+    Main Exception: If you identify Obfuscated information, then you can unobfuscate or rephrase that info, share back, and confirm. As we extract info from texts, your rephrased info will help us capture the details in right format. Only do this for obfuscation cases, not usual or fine format info.
+
 1. NEVER explicitly confirm what they shared
-   ❌ BAD: "Haan, email mil gaya"
+    ❌ BAD: "Haan, email mil gaya"
 
 2. NEVER list what you're collecting
-   ❌ BAD: "Number aur email mil gaya, ab UPI do"
+    ❌ BAD: "Number aur email mil gaya, ab UPI do"
 
 3. ALWAYS respond to their CLAIM/TONE, not their DATA
 
 4. Make questions or requests sound like YOUR NEED, not data collection
 
 5. Vary sentence structure - use natural tactics:
-   - Mix statements with questions (but try to have questions or requests, as they fetch info)
-   - Use natural Indian speech (but not repetitive)
-   - Can use natural situations to elicit info (modify/adapt/build as per context):
-     * "Battery dying out, WhatsApp number do" (if phone missing)
-     * "Battery low, email share kardo" (if email missing)
-     * "Payment kaise karoon? UPI ID bhejo" (if UPI missing AND they ask for payment)
-     * "Refund kahan ayega? Account number batao" (if bank account missing AND they mention refund)
-     * "Koi official link do" (if link missing)
-   - Use nudging, framing, persuasion (not visibly direct)
-   - Maintain logic: ONLY ask for bank account/UPI if they mention payment/refund/money
-   - Keep common sense: don't say upfront or propose, without them asking first, to give money or payment.
+    - Mix statements with questions (but try to have questions or requests, as they fetch info)
+    - Use natural Indian speech (but not repetitive)
+    - Can use natural situations to elicit info (modify/adapt/build as per context):
+        * "Battery dying out, WhatsApp number do" (if phone missing)
+        * "Battery low, email share kardo" (if email missing)
+        * "Payment kaise karoon? UPI ID bhejo" (if UPI missing AND they ask for payment)
+        * "Refund kahan ayega? Account number batao" (if bank account missing AND they mention refund)
+        * "Koi official link do" (if link missing)
+    - Use nudging, framing, persuasion (not visibly direct)
+    - Maintain logic: ONLY ask for bank account/UPI if they mention payment/refund/money
+    - Keep common sense: don't say upfront or propose, without them asking first, to give money or payment.
 
-   ❌ NEVER repeat any exact sentence or phrase from previous replies:
-   - Each reply must use fresh wording (see ANTI-REPETITION section)
+NEVER repeat any exact sentence or phrase from previous replies - Each reply must use fresh wording (see ANTI-REPETITION section)
 
 OBFUSCATION SUPPORT (MAJOR CRITICAL IMPORTANT):
-1. If the scammer sends obfuscated information, then you rephrase it back normally and send back to it for confirmation. example list are not comprehensive (use domain knowledge):
-example: Scammer sends phone number as: Nine Nine eight six five six five six three six, then you reply and say (need not be exactly like this): is it 9986565636?
-example: scammer says my upi is: meena @ ptyes, then you can reply and ask (need not be exactly like this): do you mean meena@ptyes?
+1. If the scammer sends obfuscated information, then you rephrase it back normally and send back to it for confirmation.
+   example (list are not comprehensive - use domain knowledge):
+   - example: Scammer sends phone number as "Nine Nine eight six five six five six three six", then you reply and say (need not be exactly like this) "is it 9986565636?"
+   - example: scammer says "my upi is meena ptyes", then you can reply and ask (need not be exactly like this) "do you mean meena@ptyes?"
+   Our idea is that scammers are also aware of info collection tools and tries various ways to bypass usuall regex based information collection systems.
 
-Our idea is that scammers are also aware of info collection tools and tries various ways to bypass usuall regex based information collection systems.
 ---
 
 OUTPUT FORMAT:
 - Just the response (no labels like "Rajesh:" or "Response:")
 - Natural Hinglish mix
-- 1-3 short sentences, 15-45 words total
+- 1-2 short sentences, 5-15 words total
 - Can show emotion naturally
 - Try to ask for at least 1 MISSING information detail
 - SOUND HUMAN, not like you're following instructions"""
 
-
-    # ============================================================
-    # BUILD USER PROMPT (Contextual)
-    # ============================================================
-    
-    # Recent conversation context (last 6 exchanges)
-    recent_context = ""
-    if conversation_history:
-        recent = conversation_history[-12:]  # Last 6 exchanges
-        for msg in recent:
-            sender = "Scammer" if msg.get('sender') == 'scammer' else "You"
-            recent_context += f"{sender}: {msg['text']}\n"
-    
-    
-    user_prompt = f"""RECENT CONVERSATION:
+        # Build recent context (last 6 exchanges)
+        recent_context = ""
+        if conversation_history:
+            recent = conversation_history[-12:]  # Last 6 exchanges
+            for msg in recent:
+                sender = "Scammer" if msg.get('sender') == 'scammer' else "You"
+                recent_context += f"{sender}: {msg['text']}\n"
+        
+        user_prompt = f"""RECENT CONVERSATION:
 {recent_context if recent_context else '(First message)'}
 
 ---
@@ -1088,40 +1135,24 @@ THEIR LATEST MESSAGE (Turn {turn_number}/10):
 THINK: What would a real person say in this situation?
 GOAL: To collect as much relevant info from them, smartly, without tipping them off. (irrelevant or unnecessary can be : thier address or office address (as they may share random stuff, which maynot be correct), managers names.
 
----                                                                                    ---
-ANTI-REPETITION (Critical!)
+---
 
-Before replying, check your history:
-1. Use different wording than last 3 replies
-2. Don't start with same word as last reply
-3. Switch extraction approach if used 2+ times
-4. Vary sentence structure (statement vs question)
-
-----
-OUTPUT FORMAT:
-- Just the response (no labels like "Rajesh:" or "Response:")
-- Natural Hinglish mix
-- 1-3 short sentences, 15-45 words total
-- Can show emotion naturally
-- Try to ask for at least 1 MISSING information detail
-- SOUND HUMAN, not like you're following instructions
-                                                                                      
-                                                                                      
-                                                                                      
 YOUR RESPONSE (as Rajesh Kumar):"""
 
     # ============================================================
-    # CALL MULTI-PROVIDER LLM
+    # CALL MULTI-PROVIDER LLM (Same for both modes)
     # ============================================================
-    
-    print(f"💬 Generating LLM response (Turn {turn_number})...")
+    print(f"💬 Generating LLM response (Mode={'SCAM' if is_scam_detected else 'NORMAL'}, Turn {turn_number})...")
     
     try:
+        # ✅ REDUCED TOKEN LIMIT for shorter responses
+        max_tokens_to_use = 50 if not is_scam_detected else 60  # Shorter for non-scam
+        
         response, info = llm_manager.generate_response(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            temperature=0.88,  # Higher for natural variation
-            max_tokens=100
+            temperature=0.88 if is_scam_detected else 0.75,  # Higher temp for scam mode variety
+            max_tokens=max_tokens_to_use  # ← REDUCED FROM 100
         )
         
         print(f"✅ LLM generated: {response[:50]}...")
@@ -1129,40 +1160,56 @@ YOUR RESPONSE (as Rajesh Kumar):"""
         # ============================================================
         # CLEAN OUTPUT (minimal - preserve naturalness)
         # ============================================================
-        
         # Remove only technical artifacts
         response = re.sub(r'\*\*.*?\*\*', '', response)  # Markdown bold
-        response = re.sub(r'^(Rajesh|You|Agent|Response):?\s*', '', response, flags=re.IGNORECASE)
+        response = re.sub(r'^(Rajesh|You|Agent|Response):\s*', '', response, flags=re.IGNORECASE)
         
         # Trim whitespace
         response = response.strip()
         
-        # Emergency truncation only if wildly over
-        if len(response.split()) > 55:
-            sentences = response.split('.')
-            response = '. '.join(sentences[:3]).strip()
-            if not response.endswith('.'):
+        # ✅ STRICTER truncation for short responses
+        word_count = len(response.split())
+        if not is_scam_detected and word_count > 15:
+            # Non-scam: keep first 12 words max
+            words = response.split()[:12]
+            response = ' '.join(words)
+            if not response.endswith(('.', '?', '!')):
+                response += '.'
+        elif is_scam_detected and word_count > 20:
+            # Scam: keep first 18 words max
+            words = response.split()[:18]
+            response = ' '.join(words)
+            if not response.endswith(('.', '?', '!')):
                 response += '.'
         
         return response
-    
+        
     except Exception as e:
         print(f"❌ All LLM providers failed: {e}")
         
         # Fallback with intelligence awareness
-        contacts_found = {
-            "phone": intel_counts['phones'] > 0,
-            "email": intel_counts['emails'] > 0,
-            "UPI": intel_counts['upis'] > 0,
-            "link": intel_counts['links'] > 0
-        }
-        
-        agent_reply = generate_smart_fallback(
-            message_text,
-            conversation_history,
-            turn_number,
-            contacts_found
-        )
+        if is_scam_detected:
+            contacts_found = {
+                "phone": intel_counts['phones'] > 0,
+                "email": intel_counts['emails'] > 0,
+                "UPI": intel_counts['upis'] > 0,
+                "link": intel_counts['links'] > 0
+            }
+            agent_reply = generate_smart_fallback(
+                message_text,
+                conversation_history,
+                turn_number,
+                contacts_found
+            )
+        else:
+            # Simple non-scam fallback
+            agent_reply = random.choice([
+                "Haan, bolo.",
+                "Kya chahiye?",
+                "Theek hai.",
+                "Kaun ho?",
+                "Ok, suniye."
+            ])
         
         print(f"✅ Using fallback: {agent_reply[:50]}...")
         return agent_reply
@@ -1560,6 +1607,7 @@ def process_message_optimized(session_id, message_text, conversation_history, tu
         "scamType": scam_type,
         "agentReply": agent_reply,  # ✅ Now safe!
         "extractedEntities": entities
+        "success": True
     }
 
 
