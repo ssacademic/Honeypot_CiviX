@@ -767,20 +767,216 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
     return is_confirmed, new_markers, total_markers
 
 
+# ============================================================
+# OPTION 1: SMART RULE-BASED CLASSIFIER (FIXED VERSION)
+# Fast, accurate, uses actual indicators
+# ============================================================
+
 def determine_scam_type(indicators):
-    """Map indicators to scam category"""
-    if "lottery_scam" in indicators:
-        return "lottery_scam"
-    if "payment_demand" in indicators:
-        return "upi_fraud"
-    if "threat" in indicators and "verification_request" in indicators:
-        return "kyc_fraud"
-    if "suspicious_link" in indicators:
+    """
+    Intelligently map detected indicators to scam categories.
+    
+    FIXED PRIORITY LOGIC:
+    - Count indicators per category
+    - Use highest count
+    - Break ties with specificity
+    
+    Args:
+        indicators: List of indicator names from detect_scam_cumulative()
+        
+    Returns:
+        str: Scam type
+    """
+    if not indicators:
+        return "unknown"
+    
+    indicator_set = set(indicators)
+    
+    # Count indicators per category
+    counts = {
+        "bank_fraud": 0,
+        "upi_fraud": 0,
+        "phishing": 0,
+        "kyc_fraud": 0,
+        "lottery_scam": 0,
+        "impersonation": 0,
+        "extortion": 0,
+        "refund_scam": 0
+    }
+    
+    # ============================================================
+    # COUNT INDICATORS FOR EACH CATEGORY
+    # ============================================================
+    
+    # Bank Fraud indicators
+    bank_indicators = {
+        "account_threat", "card_threat", "bank_impersonation",
+        "credential_phishing", "password_phishing"
+    }
+    counts["bank_fraud"] = len(indicator_set & bank_indicators)
+    
+    # UPI Fraud indicators
+    upi_indicators = {
+        "cashback_scam", "upi_payment_scam", "payment_request", 
+        "fake_transaction"
+    }
+    counts["upi_fraud"] = len(indicator_set & upi_indicators)
+    
+    # Phishing indicators
+    phishing_indicators = {"suspicious_link", "fake_domain"}
+    counts["phishing"] = len(indicator_set & phishing_indicators)
+    
+    # KYC Fraud indicators
+    kyc_indicators = {"kyc_phishing", "verification_phishing"}
+    counts["kyc_fraud"] = len(indicator_set & kyc_indicators)
+    
+    # Lottery/Prize indicators
+    lottery_indicators = {"prize_scam", "fake_earning"}
+    counts["lottery_scam"] = len(indicator_set & lottery_indicators)
+    
+    # Impersonation indicators
+    impersonation_indicators = {
+        "authority_impersonation", "govt_impersonation"
+    }
+    counts["impersonation"] = len(indicator_set & impersonation_indicators)
+    
+    # Extortion indicators
+    extortion_indicators = {"legal_threat", "emergency_scam", "fake_penalty"}
+    counts["extortion"] = len(indicator_set & extortion_indicators)
+    
+    # Refund scam indicators
+    if "money_recovery" in indicator_set:
+        counts["refund_scam"] = 1
+    
+    # ============================================================
+    # SPECIAL RULES (Override pure counts)
+    # ============================================================
+    
+    # Rule 1: If phishing link + prize → phishing (attack vector wins)
+    if counts["phishing"] > 0 and counts["lottery_scam"] > 0:
         return "phishing"
-    if "authority_impersonation" in indicators:
-        return "impersonation"
+    
+    # Rule 2: If bank + KYC indicators → bank_fraud (more specific)
+    # (KYC fraud is typically about document verification, not account compromise)
+    if counts["bank_fraud"] >= 2 and counts["kyc_fraud"] > 0:
+        return "bank_fraud"
+    
+    # Rule 3: If UPI indicators >= 2 → upi_fraud
+    if counts["upi_fraud"] >= 2:
+        return "upi_fraud"
+    
+    # Rule 4: If prize_scam + payment_request (but only 1 UPI indicator) → lottery_scam
+    # (This is the "you won, pay processing fee" pattern)
+    if "prize_scam" in indicator_set and counts["upi_fraud"] == 1:
+        return "lottery_scam"
+    
+    # ============================================================
+    # FIND HIGHEST COUNT
+    # ============================================================
+    
+    # Get max count
+    max_count = max(counts.values())
+    
+    if max_count == 0:
+        return "unknown"
+    
+    # Get all categories with max count
+    top_categories = [cat for cat, count in counts.items() if count == max_count]
+    
+    # If tie, use priority order
+    priority_order = [
+        "bank_fraud",      # Most common
+        "upi_fraud",       # Second most common
+        "phishing",        # Third most common
+        "kyc_fraud",
+        "lottery_scam",
+        "impersonation",
+        "extortion",
+        "refund_scam"
+    ]
+    
+    for category in priority_order:
+        if category in top_categories:
+            return category
+    
     return "unknown"
 
+
+# ============================================================
+# TESTING
+# ============================================================
+
+if __name__ == "__main__":
+    print("="*70)
+    print("TESTING IMPROVED CLASSIFIER")
+    print("="*70)
+    
+    test_cases = [
+        {
+            "name": "Bank Fraud (Sample Scenario)",
+            "indicators": ["verification_phishing", "multiple_urgency", "account_threat", "urgency", "credential_phishing"],
+            "expected": "bank_fraud"
+        },
+        {
+            "name": "UPI Fraud",
+            "indicators": ["cashback_scam", "upi_payment_scam", "payment_request", "urgency"],
+            "expected": "upi_fraud"
+        },
+        {
+            "name": "Phishing with Prize",
+            "indicators": ["suspicious_link", "prize_scam", "fake_domain", "urgency"],
+            "expected": "phishing"
+        },
+        {
+            "name": "Pure KYC Fraud",
+            "indicators": ["kyc_phishing", "verification_phishing"],
+            "expected": "kyc_fraud"
+        },
+        {
+            "name": "Lottery Scam (No Link)",
+            "indicators": ["prize_scam", "urgency", "payment_request"],
+            "expected": "lottery_scam"
+        },
+        {
+            "name": "Impersonation",
+            "indicators": ["authority_impersonation", "govt_impersonation"],
+            "expected": "impersonation"
+        },
+        {
+            "name": "Single - Account Threat",
+            "indicators": ["account_threat"],
+            "expected": "bank_fraud"
+        },
+        {
+            "name": "No Indicators",
+            "indicators": [],
+            "expected": "unknown"
+        }
+    ]
+    
+    passed = 0
+    failed = 0
+    
+    for test in test_cases:
+        result = determine_scam_type(test["indicators"])
+        expected = test["expected"]
+        
+        if result == expected:
+            print(f"✅ {test['name']}: {result}")
+            passed += 1
+        else:
+            print(f"❌ {test['name']}: got '{result}', expected '{expected}'")
+            print(f"   Indicators: {test['indicators']}")
+            failed += 1
+    
+    print(f"\n{'='*70}")
+    print(f"RESULTS: {passed}/{len(test_cases)} passed")
+    
+    if failed == 0:
+        print("🎉 All tests passed!")
+    else:
+        print(f"⚠️  {failed} tests failed")
+        
 
 # ============================================================
 # PERSONA & ADAPTIVE ENGAGEMENT
