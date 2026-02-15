@@ -1859,7 +1859,7 @@ class SessionManager:
         session["scamMarkersCumulative"] += confidence
         
         # CRITICAL: Once 3+ markers detected, flag STAYS True
-        if session["scamMarkersCumulative"] >= 0.8 and not session["scamDetectedFlag"]:
+        if session["scamMarkersCumulative"] >= 1.1 and not session["scamDetectedFlag"]:
             session["scamDetectedFlag"] = True
             session["scamDetected"] = True  # Update old field too for compatibility
             print(f"🚨 SCAM CONFIRMED: Session {session_id} at turn {session['turnCount']}")
