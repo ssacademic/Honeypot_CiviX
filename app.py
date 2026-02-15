@@ -4,7 +4,7 @@
 # ============================================================
 
 print("\n" + "="*80)
-print("🚀 HONEYPOT SCAM DETECTION SYSTEM V7")
+print("🚀 HONEYPOT SCAM DETECTION SYSTEM V6")
 
 
 print("="*80 + "\n")
@@ -15,6 +15,11 @@ print("="*80 + "\n")
 # BLOCK 1: ENVIRONMENT SETUP WITH GROQ
 # ============================================================
 
+# Install required packages
+print("📦 Installing packages...")
+
+
+print("✅ Packages installed!\n")
 
 # Imports
 import os
@@ -28,8 +33,8 @@ import openai
 from groq import Groq
 
 import random  # NEW
-import unicodedata
-import sys
+
+
 # ============================================================
 # REQUEST VELOCITY CONTROL (Smart Rate Limiting - FIXED)
 # ============================================================
@@ -556,10 +561,7 @@ class MultiProviderLLM:
 
 
 # Initialize global LLM manager
-print('🔄 About to create LLM Manager...', file=sys.stderr)
 llm_manager = MultiProviderLLM()
-print('✅ LLM Manager created!', file=sys.stderr)
-
 
 print("\n" + "="*60)
 print("✅ LLM MANAGER READY WITH NEW GEMINI SDK!")
@@ -607,35 +609,7 @@ from functools import wraps
 # DETECTION LOGIC: Advisory Only (Not Blocking)
 # ============================================================
 
-def normalize_text_simple(text):
-    """Safe, lightweight normalization - won't crash!"""
-    if not text:
-        return ""
-    
-    try:
-        # Remove invisible chars
-        text = text.replace('\u200B', '').replace('\u200C', '').replace('\u200D', '')
-        text = text.replace('\uFEFF', '').replace('\u00AD', '')
-        
-        # Unicode normalization
-        text = unicodedata.normalize('NFKD', text)
-        text = ''.join([c for c in text if not unicodedata.combining(c)])
-        text = text.lower()
-        
-        # Leet speak basics
-        text = text.replace('@', 'a').replace('4', 'a')
-        text = text.replace('3', 'e')
-        text = text.replace('1', 'i').replace('!', 'i')
-        text = text.replace('0', 'o')
-        text = text.replace('$', 's').replace('5', 's')
-        text = text.replace('7', 't')
-        
-        # Spaces
-        text = re.sub(r'\s+', ' ', text)
-        return text.strip()
-    
-    except:
-        return text.lower()  # Failsafe
+
 
 def detect_scam_cumulative(session_id, message_text, conversation_history):
     """
@@ -663,68 +637,59 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
         msg["text"] for msg in conversation_history 
         if msg.get("sender") == "scammer"
     ])
-    
     full_text = message_text + " " + scammer_only
- 
-    
-    text_normalized = normalize_text_simple(full_text)
-    combined = text_normalized + " " + full_text.lower()
+    text_lower = full_text.lower()
     
     new_markers = []
     
     # ===== SCAM PATTERN DETECTION (Industry Standard) =====
     
-        # ===== IMPROVED SCAM PATTERN DETECTION =====
-    
-    # 1. Account Threat (HIGH CONFIDENCE) - FIXED: bidirectional
-    if re.search(r'(block|suspend|freeze|close|deactivat|lock)', combined) and \
-       re.search(r'(account|card|upi|wallet)', combined):
+    # 1. Account Threat (HIGH CONFIDENCE)
+    if re.search(r'(block|suspend|freeze|close|deactivat).{0,30}(account|card|upi)', text_lower):
         new_markers.append(("account_threat", 1.0))
     
     # 2. Urgency Tactics (MEDIUM CONFIDENCE)
-    if re.search(r'(urgent|immediately|asap|hurry|quick|fast|now|today)', combined):
+    if re.search(r'(urgent|immediately|asap|hurry|quick|fast|now|today)', text_lower):
         new_markers.append(("urgency", 0.7))
     
-    # 3. KYC Phishing (HIGH CONFIDENCE) - FIXED: verify + link OR kyc
-    if re.search(r'(verify|update|confirm|complete)', combined) and \
-       (re.search(r'\.(com|in|org|net|xyz|tk|ml)', combined) or \
-        re.search(r'(kyc|pan|aadhar|documents?)', combined)):
+    # 3. KYC Phishing (HIGH CONFIDENCE)
+    if re.search(r'(verify|update|confirm|complete).{0,30}(kyc|pan|aadhar|documents?)', text_lower):
         new_markers.append(("kyc_phishing", 1.0))
     
     # 4. Payment Request (HIGH CONFIDENCE)
-    if re.search(r'(pay|payment|deposit|transfer|send).{0,30}(money|amount|rs\.?|rupees?|\d+)', combined):
+    if re.search(r'(pay|payment|deposit|transfer|send).{0,30}(money|amount|rs\.?|rupees?|\d+)', text_lower):
         new_markers.append(("payment_request", 1.0))
     
-    # 5. Link in Message (MEDIUM CONFIDENCE) - FIXED: bare domains
-    if re.search(r'(http://|https://|bit\.ly|tinyurl|goo\.gl|t\.co|[a-z0-9-]+\.(com|in|xyz|tk|ml))', combined):
+    # 5. Link in Message (MEDIUM CONFIDENCE)
+    if re.search(r'(http://|https://|bit\.ly|tinyurl|goo\.gl|t\.co)', text_lower):
         new_markers.append(("suspicious_link", 0.7))
     
-    # 6. Authority Impersonation (HIGH CONFIDENCE) - FIXED: bank names
-    if re.search(r'(\bbank\b|rbi|sbi|hdfc|icici|axis|kotak|pnb|income tax|government|police|cyber|fraud|security)', combined):
+    # 6. Authority Impersonation (HIGH CONFIDENCE)
+    if re.search(r'(bank|rbi|income tax|government|police|cyber|fraud|security)', text_lower):
         new_markers.append(("authority_impersonation", 0.8))
     
     # 7. Prize/Lottery Scam (HIGH CONFIDENCE)
-    if re.search(r'(won|winner|prize|lottery|reward|congratulations?).{0,30}(lakh|crore|rs\.?)', combined):
+    if re.search(r'(won|winner|prize|lottery|reward|congratulations?).{0,30}(lakh|crore|rs\.?)', text_lower):
         new_markers.append(("prize_scam", 1.0))
     
     # 8. Credential Request (CRITICAL)
-    if re.search(r'(otp|password|pin|cvv|card number|account number)', combined):
+    if re.search(r'(otp|password|pin|cvv|card number|account number)', text_lower):
         new_markers.append(("credential_phishing", 1.5))
     
     # 9. Legal Threat (HIGH CONFIDENCE)
-    if re.search(r'(legal action|arrest|fine|penalty|court|case|fir)', combined):
+    if re.search(r'(legal action|arrest|fine|penalty|court|case|fir)', text_lower):
         new_markers.append(("legal_threat", 1.0))
 
     # 10. Money recovery scam
-    if re.search(r'(refund|cashback|return).{0,30}(money|amount|payment)', combined):
+    if re.search(r'(refund|cashback|return).{0,30}(money|amount|payment)', text_lower):
         new_markers.append(("money_recovery", 0.9))
 
     # 11. Fake job/investment
-    if re.search(r'(earn|make).{0,30}(₹|rs\.?|rupees?|lakh|crore).{0,30}(daily|weekly|month)', combined):
+    if re.search(r'(earn|make).{0,30}(₹|rs\.?|rupees?|lakh|crore).{0,30}(daily|weekly|month)', text_lower):
         new_markers.append(("fake_earning", 1.0))
 
     # 12. Social engineering urgency
-    if re.search(r'(family member|relative|friend).{0,30}(emergency|accident|hospital)', combined):
+    if re.search(r'(family member|relative|friend).{0,30}(emergency|accident|hospital)', text_lower):
         new_markers.append(("emergency_scam", 1.2))
 
     
@@ -1109,10 +1074,8 @@ AUTHENTICITY RULES (understand the underlying idea and adapt):
     
     Main Exception: If you identify Obfuscated information, then you can unobfuscate or rephrase that info, share back, and confirm. As we extract info from texts, your rephrased info will help us capture the details in right format. Only do this for obfuscation cases, not usual or fine format info.
 
-1. NEVER explicitly confirm what they shared (very important) (example only suggestive - can be more such cases - try to understand underlying idea)
+1. NEVER explicitly confirm what they shared
     ❌ BAD: "Haan, email mil gaya"
-    ❌ BAD: "Email toh mil gaya, ab phone de do"
-    ❌ BAD: "X toh mil gaya, ab Y de do"
 
 2. NEVER list what you're collecting
     ❌ BAD: "Number aur email mil gaya, ab UPI do"
