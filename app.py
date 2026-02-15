@@ -2452,6 +2452,7 @@ def send_final_callback_to_guvi(session_id):
                 "upiIds": intelligence.get("upiIds", []),
                 "phishingLinks": intelligence.get("phishingLinks", []),
                 "phoneNumbers": intelligence.get("phoneNumbers", []),
+                "emailAddresses": intelligence.get('emails', []),
                 "suspiciousKeywords": intelligence.get("suspiciousKeywords", [])
             },
             "agentNotes": summary.get("agentNotes", "Intelligence extraction completed")
