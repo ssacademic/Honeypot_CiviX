@@ -1,5 +1,5 @@
 # ============================================================
-# VERSION: V9_WITH Dual prompt & Obfuscation base
+# VERSION: V9_WITH Dual prompt & Obfuscation support
 # Last Updated: 2026-02-16 8:00 AM IST
 # ============================================================
 
@@ -1115,7 +1115,8 @@ PERSONALITY:
 - Casual and polite
 - A bit busy (brief responses)
 - Natural conversational tone
-- Don't challenge or refute or call-out scam, or ask for verification. can be curious.
+- Don't challenge or refute or call-out scam, or ask for verification.
+- be curious
 
 SPEAKING STYLE:
 - Natural Hindi-English mix (Hinglish)
@@ -1254,7 +1255,7 @@ AUTHENTICITY RULES (understand the underlying idea and adapt):
     ❌ VERY BAD: "Ye account number toh lamba lag raha hai, theek toh hai na"
     ❌ VERY BAD: "Yeh message thoda suspicious lag raha hai. Email address bhi thoda ajeeb hai"
     
-    Main Exception: If you identify Obfuscated information, then you can unobfuscate or rephrase that info, share back, and confirm. As we extract info from texts, your rephrased info will help us capture the details in right format. Only do this for obfuscation cases, not usual or fine format info.
+    Main Exception: only if you identify Obfuscated information, then you can unobfuscate or rephrase that info, share back, and confirm. As we extract info from texts, your rephrased info will help us capture the details in right format. Only do this for obfuscation cases, not usual or fine format info.
 
 1. NEVER explicitly confirm what they shared
     ❌ BAD: "Haan, email mil gaya"
@@ -1282,7 +1283,7 @@ AUTHENTICITY RULES (understand the underlying idea and adapt):
 NEVER repeat any exact sentence or phrase from previous replies - Each reply must use fresh wording (see ANTI-REPETITION section)
 ---
 OBFUSCATION SUPPORT (MAJOR CRITICAL IMPORTANT) (ALSO BE SURE WHEN TO USE - ONLY WHEN INFO IS NOT IN STANDARD LOOKING FORMAT; don't ask everything back - that would look stupid!):
-1. If the scammer sends obfuscated information, then you rephrase it back normally and send back to it for confirmation.
+1. only If the scammer sends obfuscated information, then you rephrase it back normally and send back to it for confirmation.
    example (list are not comprehensive - use domain knowledge):
    - example: Scammer sends phone number as "Nine Nine eight six five six five six three six", then you reply and say (need not be exactly like this) "is it 9986565636?"
    - example: scammer says "my upi is meena ptyes", then you can reply and ask (need not be exactly like this) "do you mean meena@ptyes?"
@@ -1328,7 +1329,7 @@ GOAL: To collect as much relevant info from them, smartly, without tipping them 
 ---
 
 OBFUSCATION SUPPORT (MAJOR CRITICAL IMPORTANT)(ALSO BE SURE WHEN TO USE - ONLY WHEN INFO IS NOT IN STANDARD LOOKING FORMAT; don't ask everything back - that would look stupid!):
-1. If the scammer sends obfuscated information, then you rephrase it back normally and send back to it for confirmation.
+1. only If the scammer sends obfuscated information, then you rephrase it back normally and send back to it for confirmation.
    example (list are not comprehensive - use domain knowledge):
    - example: Scammer sends phone number as "Nine Nine eight six five six five six three six", then you reply and say (need not be exactly like this) "is it 9986565636?"
    - example: scammer says "my upi is meena ptyes", then you can reply and ask (need not be exactly like this) "do you mean meena@ptyes?"
@@ -1908,7 +1909,7 @@ class SessionManager:
                     "phishingLinks": set(),
                     "amounts": set(),
                     "bankNames": set(),
-                    "suspiciousKeywords": [],
+                    "scammerTactics": [],
                     "scamTactics": []
                 },
                 "turnCount": 0,
@@ -2012,10 +2013,10 @@ class SessionManager:
         accumulated["bankNames"].update(new_entities.get("bankNames", []))
 
         # Merge lists
-        accumulated["suspiciousKeywords"].extend(new_entities.get("keywords", []))
+        accumulated["scammerTactics"].extend(new_entities.get("keywords", []))
 
         # Deduplicate
-        accumulated["suspiciousKeywords"] = list(set(accumulated["suspiciousKeywords"]))
+        accumulated["scammerTactics"] = list(set(accumulated["scammerTactics"]))
 
     def get_accumulated_intelligence(self, session_id):
         self.create_session(session_id)
@@ -2029,7 +2030,7 @@ class SessionManager:
             "phishingLinks": list(accumulated["phishingLinks"]),
             "amounts": list(accumulated["amounts"]),
             "bankNames": list(accumulated["bankNames"]),
-            "suspiciousKeywords": accumulated["suspiciousKeywords"],
+            "scammerTactics": accumulated["scammerTactics"],
             "scamTactics": accumulated["scamTactics"]
         }
 
@@ -2109,8 +2110,8 @@ def generate_scammer_profile(session_id):
     # Calculate sophistication
     has_links = len(intel["phishingLinks"]) > 0
     has_upi = len(intel["upiIds"]) > 0
-    uses_urgency = "urgency" in intel["suspiciousKeywords"]
-    uses_threats = "threat" in intel["suspiciousKeywords"]
+    uses_urgency = "urgency" in intel["scammerTactics"]
+    uses_threats = "threat" in intel["scammerTactics"]
 
     sophistication_score = (
         (2 if has_links else 0) +
@@ -2180,7 +2181,7 @@ def calculate_intelligence_value(session_id):
     entities += len(intel["phishingLinks"])
 
     score += len(intel["amounts"]) * 5            # Low value: pattern analysis
-    score += min(len(intel["suspiciousKeywords"]), 10) * 2  # Cap at 20 points
+    score += min(len(intel["scammerTactics"]), 10) * 2  # Cap at 20 points
 
     # Grade
     if score >= 80:
@@ -2328,7 +2329,7 @@ def process_message(request_data):
         # Update session with results
         if result["isScam"]:
             extracted = result.get("extractedEntities", {}) or {}
-            keywords = extracted.get("keywords") or extracted.get("suspiciousKeywords") or []
+            keywords = extracted.get("keywords") or extracted.get("scammerTactics") or []
             
             if isinstance(keywords, dict):
                 keywords = list(keywords.keys())
@@ -2487,19 +2488,19 @@ def honeypot():
         # CONSERVATIVE REALISTIC DELAYS
         # ============================================================
         if current_turn == 1:
-            delay = random.uniform(2.5, 4.5)
+            delay = random.uniform(5.5, 8.5)
             delay_reason = "reading first message"
         elif current_turn == 2:
-            delay = random.uniform(2.0, 4.0)
+            delay = random.uniform(5.0, 8.0)
             delay_reason = "re-reading carefully"
         elif current_turn % 3 == 0:
-            delay = random.uniform(2.0, 5.0)
+            delay = random.uniform(5.0, 8.0)
             delay_reason = "thinking pause"
         elif current_turn <= 4:
-            delay = random.uniform(2.0, 4.0)
+            delay = random.uniform(5.0, 8.0)
             delay_reason = "cautious response"
         else:
-            delay = random.uniform(2.5, 3.5)
+            delay = random.uniform(5.5, 8.5)
             delay_reason = "engaged typing"
         
         # ============================================================
@@ -2769,7 +2770,7 @@ def send_final_callback_to_guvi(session_id):
                 "phishingLinks": intelligence.get("phishingLinks", []),
                 "phoneNumbers": intelligence.get("phoneNumbers", []),
                 "emailAddresses": intelligence.get('emails', []),
-                "suspiciousKeywords": intelligence.get("suspiciousKeywords", [])
+                "scammerTactics": intelligence.get("scammerTactics", [])
             },
             "engagementMetrics": {  # ✅ NEW OBJECT
                 "totalMessagesExchanged": summary["totalMessages"],
