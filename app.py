@@ -613,7 +613,9 @@ from functools import wraps
 
 def detect_scam_cumulative(session_id, message_text, conversation_history):
     """
-    FIXED: Cumulative scam detection - doesn't flip-flop.
+    EXPANDED: 25-marker cumulative scam detection (upgraded from 12)
+    
+
     
     Analyzes current message + full conversation history.
     Adds markers cumulatively. Once 3+ markers detected, scam flag STAYS True.
@@ -642,7 +644,9 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
     
     new_markers = []
     
-    # ===== SCAM PATTERN DETECTION (Industry Standard) =====
+    # ============================================================
+    # EXISTING 12 MARKERS (UNCHANGED - PROVEN TO WORK)
+    # ============================================================
     
     # 1. Account Threat (HIGH CONFIDENCE)
     if re.search(r'(block|suspend|freeze|close|deactivat).{0,30}(account|card|upi)', text_lower):
@@ -691,9 +695,69 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
     # 12. Social engineering urgency
     if re.search(r'(family member|relative|friend).{0,30}(emergency|accident|hospital)', text_lower):
         new_markers.append(("emergency_scam", 1.2))
-
     
-    # Add markers to session (cumulative)
+    # ============================================================
+    # NEW 13 MARKERS (SAFE ADDITIONS FOR BETTER COVERAGE)
+    # ============================================================
+    
+    # 13. Card security threat
+    if re.search(r'(card|atm|debit|credit).{0,30}(block|misuse|fraud|unauthori)', text_lower):
+        new_markers.append(("card_threat", 1.0))
+    
+    # 14. Transaction alert fake
+    if re.search(r'(transaction|payment).{0,30}(debited|deducted|failed|pending)', text_lower):
+        new_markers.append(("fake_transaction", 0.9))
+    
+    # 15. Deadline threat
+    if re.search(r'(last chance|final warning|expire|deadline)', text_lower):
+        new_markers.append(("deadline_threat", 0.8))
+    
+    # 16. Immediate action required
+    if re.search(r'(act now|action required|respond immediately)', text_lower):
+        new_markers.append(("immediate_action", 0.8))
+    
+    # 17. Account verification
+    if re.search(r'(verify|confirm|validate).{0,30}(account|identity|profile)', text_lower):
+        new_markers.append(("verification_phishing", 0.9))
+    
+    # 18. Password/PIN request (additional to #8)
+    if re.search(r'(password|pin|mpin|secret code)', text_lower):
+        new_markers.append(("password_phishing", 1.4))
+    
+    # 19. Bank impersonation (specific banks)
+    if re.search(r'(sbi|hdfc|icici|axis|paytm|phonepe).{0,30}(team|support|care)', text_lower):
+        new_markers.append(("bank_impersonation", 1.1))
+    
+    # 20. Government impersonation (specific)
+    if re.search(r'(government|ministry|rbi|income tax).{0,30}(department|office)', text_lower):
+        new_markers.append(("govt_impersonation", 1.0))
+    
+    # 21. Cashback/refund with amount
+    if re.search(r'(cashback|refund).{0,30}(₹|rs|amount|lakh)', text_lower):
+        new_markers.append(("cashback_scam", 0.9))
+    
+    # 22. UPI payment request (specific)
+    if re.search(r'(upi|phonepe|paytm|gpay).{0,30}(send|transfer|pay)', text_lower):
+        new_markers.append(("upi_payment_scam", 1.0))
+    
+    # 23. Tax/penalty payment
+    if re.search(r'(tax|penalty|fine).{0,30}(pay|clear|outstanding)', text_lower):
+        new_markers.append(("fake_penalty", 1.0))
+    
+    # 24. Fake domain detection
+    if re.search(r'(verify|secure|update|login).{0,10}\.(com|in|net)', text_lower):
+        new_markers.append(("fake_domain", 0.8))
+    
+    # 25. Multiple urgency signals (keyword density check)
+    urgency_words = ['urgent', 'immediately', 'asap', 'now', 'today', 'hurry']
+    urgency_count = sum(1 for word in urgency_words if word in text_lower)
+    if urgency_count >= 2:
+        new_markers.append(("multiple_urgency", 0.8))
+    
+    # ============================================================
+    # ADD ALL MARKERS TO SESSION (CUMULATIVE)
+    # ============================================================
+    
     for indicator, confidence in new_markers:
         session_manager.add_scam_marker(session_id, indicator, confidence)
     
