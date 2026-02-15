@@ -2181,7 +2181,7 @@ def process_message(request_data):
             # RETURN MINIMAL GUVI-COMPLIANT RESPONSE
             return jsonify({
                 "status": "success",
-                "reply": final_reply
+                "reply": agent_reply
             }), 200
 
         # ============================================================
