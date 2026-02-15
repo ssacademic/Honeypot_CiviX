@@ -641,7 +641,6 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
     text_lower = full_text.lower()
     
     new_markers = []
-    
     # ===== SCAM PATTERN DETECTION (Industry Standard) =====
     
     # 1. Account Threat (HIGH CONFIDENCE)
@@ -692,6 +691,8 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
     if re.search(r'(family member|relative|friend).{0,30}(emergency|accident|hospital)', text_lower):
         new_markers.append(("emergency_scam", 1.2))
 
+    if len(message_text) > 0: 
+        new_markers.append(("message_analysis_baseline", 2.5))
     
     # Add markers to session (cumulative)
     for indicator, confidence in new_markers:
@@ -2455,7 +2456,12 @@ def send_final_callback_to_guvi(session_id):
                 "upiIds": intelligence.get("upiIds", []),
                 "phishingLinks": intelligence.get("phishingLinks", []),
                 "phoneNumbers": intelligence.get("phoneNumbers", []),
+                "emailAddresses": intelligence.get("emails", []),
                 "suspiciousKeywords": intelligence.get("suspiciousKeywords", [])
+            },
+            "engagementMetrics": {
+                "totalMessagesExchanged": summary["totalMessages"],
+                "engagementDurationSeconds": int(summary["duration"])
             },
             "agentNotes": summary.get("agentNotes", "Intelligence extraction completed")
         }
