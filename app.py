@@ -4,7 +4,7 @@
 # ============================================================
 
 print("\n" + "="*80)
-print("🚀 HONEYPOT SCAM DETECTION SYSTEM V6")
+print("🚀 HONEYPOT SCAM DETECTION SYSTEM V8")
 
 
 print("="*80 + "\n")
@@ -35,6 +35,9 @@ from groq import Groq
 import random  # NEW
 
 
+def printf(msg):
+    """Helper function for formatted printing"""
+    print(msg, flush=True)
 # ============================================================
 # REQUEST VELOCITY CONTROL (Smart Rate Limiting - FIXED)
 # ============================================================
