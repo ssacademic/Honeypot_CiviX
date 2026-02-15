@@ -2429,15 +2429,12 @@ def get_session_entities(session_id):
 
 def send_final_callback_to_guvi(session_id):
     """
-    Send final intelligence to GUVI - EVALUATION-COMPLIANT VERSION
+    Send final intelligence to GUVI - WITH IMPROVED ERROR HANDLING
     
-    ✅ FIXED: Added all required fields per evaluation doc:
-    - status (required - 5 pts)
-    - scamDetected (required - 5 pts)  
-    - scamType (required for evaluation)
-    - extractedIntelligence (required - 5 pts) with ALL 5 entity types
-    - engagementMetrics (optional - 2.5 pts)
-    - agentNotes (optional - 2.5 pts)
+    This is called when:
+    - Max turns reached (turn >= 10)
+    - Sufficient intelligence extracted
+    - Conversation naturally ended
     """
     try:
         if not session_manager.session_exists(session_id):
@@ -2449,66 +2446,55 @@ def send_final_callback_to_guvi(session_id):
         intelligence = session_manager.get_accumulated_intelligence(session_id)
         summary = session_manager.get_session_summary(session_id)
         
-        # ✅ FIXED: Build EVALUATION-COMPLIANT payload
+        # Prepare payload
         payload = {
-            # Required fields (15 points total)
-            "status": "success",
-            "scamDetected": session.get("scamDetectedFlag", False) or session.get("scamDetected", False),
-            "scamType": summary.get("scamType", "unknown"),
-            
-            # Required: extractedIntelligence with ALL 5 types (5 pts)
+            "sessionId": session_id,
+            "scamDetected": session.get("scamDetected", False),
+            "totalMessagesExchanged": summary["totalMessages"],
             "extractedIntelligence": {
-                "phoneNumbers": intelligence.get("phoneNumbers", []),
                 "bankAccounts": intelligence.get("bankAccounts", []),
                 "upiIds": intelligence.get("upiIds", []),
                 "phishingLinks": intelligence.get("phishingLinks", []),
-                "emailAddresses": intelligence.get("emails", [])  # ✅ FIXED: key name is "emails" in your system
+                "phoneNumbers": intelligence.get("phoneNumbers", []),
+                "emailAddresses": intelligence.get("emails", []),
+                "suspiciousKeywords": intelligence.get("suspiciousKeywords", [])
             },
-            
-            # Optional: engagementMetrics (2.5 pts)
             "engagementMetrics": {
                 "totalMessagesExchanged": summary["totalMessages"],
                 "engagementDurationSeconds": int(summary["duration"])
             },
-            
-            # Optional: agentNotes (2.5 pts)
             "agentNotes": summary.get("agentNotes", "Intelligence extraction completed")
         }
         
-        # Enhanced logging
         print(f"\n{'='*80}")
         print(f"📤 SENDING FINAL CALLBACK TO GUVI")
         print(f"{'='*80}")
         print(f"Session ID: {session_id}")
-        print(f"Status: {payload['status']}")
         print(f"Scam Detected: {payload['scamDetected']}")
-        print(f"Scam Type: {payload['scamType']}")
-        print(f"Duration: {payload['engagementMetrics']['engagementDurationSeconds']}s")
-        print(f"Total Messages: {payload['engagementMetrics']['totalMessagesExchanged']}")
-        print(f"\n📊 Entities Extracted:")
-        print(f"  ✅ Phone Numbers: {len(payload['extractedIntelligence']['phoneNumbers'])}")
-        print(f"  ✅ Bank Accounts: {len(payload['extractedIntelligence']['bankAccounts'])}")
-        print(f"  ✅ UPI IDs: {len(payload['extractedIntelligence']['upiIds'])}")
-        print(f"  ✅ Phishing Links: {len(payload['extractedIntelligence']['phishingLinks'])}")
-        print(f"  ✅ Email Addresses: {len(payload['extractedIntelligence']['emailAddresses'])}")
+        print(f"Total Messages: {payload['totalMessagesExchanged']}")
+        print(f"Entities Extracted:")
+        print(f"  - Bank Accounts: {len(payload['extractedIntelligence']['bankAccounts'])}")
+        print(f"  - UPI IDs: {len(payload['extractedIntelligence']['upiIds'])}")
+        print(f"  - Phone Numbers: {len(payload['extractedIntelligence']['phoneNumbers'])}")
+        print(f"  - Phishing Links: {len(payload['extractedIntelligence']['phishingLinks'])}")
         print(f"{'='*80}\n")
         
         # Send to GUVI
         response = requests.post(
             GUVI_CALLBACK_URL,
             json=payload,
-            headers={'Content-Type': 'application/json'},
             timeout=10
         )
         
         if response.status_code == 200:
             print(f"✅ GUVI Callback successful: {response.status_code}")
+            # Mark session as callback sent
             session_manager.sessions[session_id]["callback_sent"] = True
             session_manager.sessions[session_id]["callback_time"] = time.time()
             return True
         else:
             print(f"⚠️ GUVI Callback failed: {response.status_code}")
-            print(f"Response: {response.text[:500]}")
+            print(f"Response: {response.text[:200]}")
             return False
             
     except requests.exceptions.Timeout:
@@ -2519,6 +2505,7 @@ def send_final_callback_to_guvi(session_id):
         import traceback
         traceback.print_exc()
         return False
+
 
 # ============================================================
 # UTILITY ENDPOINTS
