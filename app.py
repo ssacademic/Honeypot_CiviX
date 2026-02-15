@@ -689,8 +689,7 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
         new_markers.append(("document_phishing", 1.0))
     
     # 15. Link to verify (bidirectional)
-    if re.search(r'(click|visit|go to|open).{0,40}(link|url|website|portal)', text_lower) and \
-       re.search(r'(verify|confirm|update|check)', text_lower):
+    if re.search(r'(click|visit|go to|open).{0,40}(link|url|website|portal)', text_lower) and re.search(r'(verify|confirm|update|check)', text_lower):
         new_markers.append(("link_verification_scam", 1.3))
     
     # ===== CATEGORY 4: CREDENTIAL HARVESTING (5 markers) =====
