@@ -2233,7 +2233,7 @@ def process_message(request_data):
         }
 
     except Exception as e:
-        printf("Pipeline error", e)
+        print("Pipeline error", e)
         import traceback
         traceback.print_exc()
         return {
