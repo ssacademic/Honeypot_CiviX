@@ -2179,10 +2179,13 @@ def process_message(request_data):
             print(f"{'='*80}\n")
             
             # RETURN MINIMAL GUVI-COMPLIANT RESPONSE
-            return jsonify({
+            return {
                 "status": "success",
-                "reply": agent_reply
-            }), 200
+                "reply": final_reply,
+                "success": True,
+                "shouldEndConversation": True,  # ← This one ends conversation
+                "agentReply": final_reply
+            }
 
         # ============================================================
         # CONTINUE NORMAL CONVERSATION
@@ -2190,21 +2193,25 @@ def process_message(request_data):
         print(f"✅ Pipeline complete - continuing conversation (Turn {turn_count})")
 
         # RETURN MINIMAL GUVI-COMPLIANT RESPONSE
-        return jsonify({
+        return {
             "status": "success",
-            "reply": agent_reply
-        }), 200
+            "reply": agent_reply,
+            "success": True,
+            "shouldEndConversation": False,  # ← Continue conversation
+            "agentReply": agent_reply
+        }
 
     except Exception as e:
-        print(f"❌ Pipeline error: {e}")
-        import traceback
-        traceback.print_exc()
+    printf("Pipeline error", e)
+    import traceback
+    traceback.print_exc()
+    return {
+        "status": "error",
+        "reply": "I'm sorry, I didn't understand. Can you repeat that?",
+        "success": False,
+        "agentReply": "I'm sorry, I didn't understand. Can you repeat that?"
+    }
 
-        # RETURN ERROR IN GUVI-COMPLIANT FORMAT
-        return jsonify({
-            "status": "error",
-            "reply": "I'm sorry, I didn't understand. Can you repeat that?"
-        }), 500
 
 print("\n" + "="*60)
 print("✅ CONTEXT-AWARE PROCESSING PIPELINE READY!")
