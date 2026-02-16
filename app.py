@@ -2728,6 +2728,7 @@ def generate_rich_agent_notes(session_id):
     # ============================================================
     turn_count = session.get("turnCount", 0)
     if turn_count >= 8:
+        pass
         # notes.append(f"Extended engagement: {turn_count} turns")
     
     # ============================================================
