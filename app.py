@@ -648,20 +648,28 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
     # EXISTING 12 MARKERS (UNCHANGED - PROVEN TO WORK)
     # ============================================================
     
+# ============================================================
+# 25 SCAM MARKERS WITH HINDI + HINGLISH SUPPORT
+# ============================================================
+
     # 1. Account Threat (HIGH CONFIDENCE)
-    if re.search(r'(block|suspend|freeze|close|deactivat).{0,30}(account|card|upi)', text_lower):
+    # English + Hinglish + Hindi: block/band/बंद, account/khata/खाता
+    if re.search(r'(block|suspend|freeze|close|deactivat|band|बंद|ब्लॉक).{0,30}(account|card|upi|khata|खाता|कार्ड)', text_lower):
         new_markers.append(("account_threat", 1.0))
     
     # 2. Urgency Tactics (MEDIUM CONFIDENCE)
-    if re.search(r'(urgent|immediately|asap|hurry|quick|fast|now|today)', text_lower):
+    # English + Hinglish + Hindi: urgent/jaldi/जल्दी, now/abhi/अभी
+    if re.search(r'(urgent|immediately|asap|hurry|quick|fast|now|today|jaldi|जल्दी|turant|तुरंत|abhi|अभी)', text_lower):
         new_markers.append(("urgency", 0.7))
     
     # 3. KYC Phishing (HIGH CONFIDENCE)
-    if re.search(r'(verify|update|confirm|complete).{0,30}(kyc|pan|aadhar|documents?)', text_lower):
+    # English + Hinglish + Hindi: verify/check/चेक, kyc/केवाईसी
+    if re.search(r'(verify|update|confirm|complete|check|चेक|satyapit|सत्यापित).{0,30}(kyc|pan|aadhar|documents?|केवाईसी|आधार)', text_lower):
         new_markers.append(("kyc_phishing", 1.0))
     
     # 4. Payment Request (HIGH CONFIDENCE)
-    if re.search(r'(pay|payment|deposit|transfer|send).{0,30}(money|amount|rs\.?|rupees?|\d+)', text_lower):
+    # English + Hinglish + Hindi: pay/payment/भुगतान, money/paise/पैसे
+    if re.search(r'(pay|payment|deposit|transfer|send|bhugtan|भुगतान|bhejo|भेजो).{0,30}(money|amount|rs\.?|rupees?|paise|पैसे|paisa|पैसा|rupaye|रुपये|\d+)', text_lower):
         new_markers.append(("payment_request", 1.0))
     
     # 5. Link in Message (MEDIUM CONFIDENCE)
@@ -669,90 +677,107 @@ def detect_scam_cumulative(session_id, message_text, conversation_history):
         new_markers.append(("suspicious_link", 0.7))
     
     # 6. Authority Impersonation (HIGH CONFIDENCE)
-    if re.search(r'(bank|rbi|income tax|government|police|cyber|fraud|security)', text_lower):
+    # English + Hindi: bank/बैंक, police/पुलिस
+    if re.search(r'(bank|rbi|income tax|government|police|cyber|fraud|security|बैंक|पुलिस|सरकार)', text_lower):
         new_markers.append(("authority_impersonation", 0.8))
     
     # 7. Prize/Lottery Scam (HIGH CONFIDENCE)
-    if re.search(r'(won|winner|prize|lottery|reward|congratulations?).{0,30}(lakh|crore|rs\.?)', text_lower):
+    # English + Hinglish + Hindi: won/jeeta/जीता, prize/inam/इनाम
+    if re.search(r'(won|winner|prize|lottery|reward|congratulations?|jeeta|जीता|jeet|जीत|inam|इनाम).{0,30}(lakh|crore|rs\.?|लाख|करोड़)', text_lower):
         new_markers.append(("prize_scam", 1.0))
     
     # 8. Credential Request (CRITICAL)
-    if re.search(r'(otp|password|pin|cvv|card number|account number)', text_lower):
+    # English + Hinglish + Hindi: otp/ओटीपी, password/पासवर्ड
+    if re.search(r'(otp|password|pin|cvv|card number|account number|ओटीपी|पासवर्ड|पिन)', text_lower):
         new_markers.append(("credential_phishing", 1.5))
     
     # 9. Legal Threat (HIGH CONFIDENCE)
-    if re.search(r'(legal action|arrest|fine|penalty|court|case|fir)', text_lower):
+    # English + Hinglish + Hindi: police/पुलिस, case/केस
+    if re.search(r'(legal action|arrest|fine|penalty|court|case|fir|pakad|पकड़|giraftari|गिरफ्तारी|केस)', text_lower):
         new_markers.append(("legal_threat", 1.0))
-
+    
     # 10. Money recovery scam
-    if re.search(r'(refund|cashback|return).{0,30}(money|amount|payment)', text_lower):
+    # English + Hinglish + Hindi: refund/वापसी
+    if re.search(r'(refund|cashback|return|wapsi|वापसी|vapsi).{0,30}(money|amount|payment|paise|पैसे)', text_lower):
         new_markers.append(("money_recovery", 0.9))
-
+    
     # 11. Fake job/investment
-    if re.search(r'(earn|make).{0,30}(₹|rs\.?|rupees?|lakh|crore).{0,30}(daily|weekly|month)', text_lower):
+    # English + Hinglish + Hindi: earn/kamao/कमाओ
+    if re.search(r'(earn|make|kamao|कमाओ|kamai|कमाई).{0,30}(₹|rs\.?|rupees?|lakh|crore|पैसे|रुपये).{0,30}(daily|weekly|month|roz|रोज|mahina|महीना)', text_lower):
         new_markers.append(("fake_earning", 1.0))
-
+    
     # 12. Social engineering urgency
-    if re.search(r'(family member|relative|friend).{0,30}(emergency|accident|hospital)', text_lower):
+    # English + Hinglish + Hindi: family/parivar/परिवार, emergency/aapat/आपात
+    if re.search(r'(family member|relative|friend|parivar|परिवार|rishtedaar|रिश्तेदार).{0,30}(emergency|accident|hospital|aapat|आपात|hadsa|हादसा|aspatal|अस्पताल)', text_lower):
         new_markers.append(("emergency_scam", 1.2))
     
     # ============================================================
-    # NEW 13 MARKERS (SAFE ADDITIONS FOR BETTER COVERAGE)
+    # NEW 13 MARKERS (WITH HINDI/HINGLISH)
     # ============================================================
     
     # 13. Card security threat
-    if re.search(r'(card|atm|debit|credit).{0,30}(block|misuse|fraud|unauthori)', text_lower):
+    # English + Hindi: card/कार्ड, fraud/धोखा
+    if re.search(r'(card|atm|debit|credit|कार्ड|एटीएम).{0,30}(block|misuse|fraud|unauthori|band|बंद|dhokha|धोखा)', text_lower):
         new_markers.append(("card_threat", 1.0))
     
     # 14. Transaction alert fake
-    if re.search(r'(transaction|payment).{0,30}(debited|deducted|failed|pending)', text_lower):
+    # English + Hinglish + Hindi: debited/kata/कटा
+    if re.search(r'(transaction|payment|लेनदेन).{0,30}(debited|deducted|failed|pending|kata|कटा|kat gaya|कट गया)', text_lower):
         new_markers.append(("fake_transaction", 0.9))
     
     # 15. Deadline threat
-    if re.search(r'(last chance|final warning|expire|deadline)', text_lower):
+    # English + Hinglish + Hindi: expire/khatam/ख़त्म
+    if re.search(r'(last chance|final warning|expire|deadline|aakhri|आखरी|khatam|ख़त्म|samay|समय)', text_lower):
         new_markers.append(("deadline_threat", 0.8))
     
     # 16. Immediate action required
-    if re.search(r'(act now|action required|respond immediately)', text_lower):
+    # English + Hinglish + Hindi: act now/abhi karo/अभी करो
+    if re.search(r'(act now|action required|respond immediately|abhi karo|अभी करो|turant|तुरंत)', text_lower):
         new_markers.append(("immediate_action", 0.8))
     
     # 17. Account verification
-    if re.search(r'(verify|confirm|validate).{0,30}(account|identity|profile)', text_lower):
+    # English + Hinglish: verify/check karo
+    if re.search(r'(verify|confirm|validate|check karo|चेक करो).{0,30}(account|identity|profile|khata|खाता)', text_lower):
         new_markers.append(("verification_phishing", 0.9))
     
-    # 18. Password/PIN request (additional to #8)
-    if re.search(r'(password|pin|mpin|secret code)', text_lower):
+    # 18. Password/PIN request
+    # English + Hindi: password/पासवर्ड
+    if re.search(r'(password|pin|mpin|secret code|पासवर्ड|पिन|gupth|गुप्त)', text_lower):
         new_markers.append(("password_phishing", 1.4))
     
     # 19. Bank impersonation (specific banks)
-    if re.search(r'(sbi|hdfc|icici|axis|paytm|phonepe).{0,30}(team|support|care)', text_lower):
+    if re.search(r'(sbi|hdfc|icici|axis|paytm|phonepe).{0,30}(team|support|care|टीम|sahayata|सहायता)', text_lower):
         new_markers.append(("bank_impersonation", 1.1))
     
-    # 20. Government impersonation (specific)
-    if re.search(r'(government|ministry|rbi|income tax).{0,30}(department|office)', text_lower):
+    # 20. Government impersonation
+    # English + Hindi: government/सरकार
+    if re.search(r'(government|ministry|rbi|income tax|sarkar|सरकार|mantralaya|मंत्रालय).{0,30}(department|office|vibhag|विभाग)', text_lower):
         new_markers.append(("govt_impersonation", 1.0))
     
     # 21. Cashback/refund with amount
-    if re.search(r'(cashback|refund).{0,30}(₹|rs|amount|lakh)', text_lower):
+    if re.search(r'(cashback|refund|wapsi|वापसी).{0,30}(₹|rs|amount|lakh|paise|पैसे)', text_lower):
         new_markers.append(("cashback_scam", 0.9))
     
-    # 22. UPI payment request (specific)
-    if re.search(r'(upi|phonepe|paytm|gpay).{0,30}(send|transfer|pay)', text_lower):
+    # 22. UPI payment request
+    # English + Hinglish: send/bhejo/भेजो
+    if re.search(r'(upi|phonepe|paytm|gpay).{0,30}(send|transfer|pay|bhejo|भेजो)', text_lower):
         new_markers.append(("upi_payment_scam", 1.0))
     
     # 23. Tax/penalty payment
-    if re.search(r'(tax|penalty|fine).{0,30}(pay|clear|outstanding)', text_lower):
+    # English + Hindi: tax/कर
+    if re.search(r'(tax|penalty|fine|kar|कर|jurmana|जुर्माना).{0,30}(pay|clear|outstanding|bharo|भरो)', text_lower):
         new_markers.append(("fake_penalty", 1.0))
     
     # 24. Fake domain detection
     if re.search(r'(verify|secure|update|login).{0,10}\.(com|in|net)', text_lower):
         new_markers.append(("fake_domain", 0.8))
     
-    # 25. Multiple urgency signals (keyword density check)
-    urgency_words = ['urgent', 'immediately', 'asap', 'now', 'today', 'hurry']
+    # 25. Multiple urgency signals (updated with Hindi/Hinglish)
+    urgency_words = ['urgent', 'immediately', 'asap', 'now', 'today', 'hurry', 'jaldi', 'जल्दी', 'turant', 'तुरंत', 'abhi', 'अभी']
     urgency_count = sum(1 for word in urgency_words if word in text_lower)
     if urgency_count >= 2:
         new_markers.append(("multiple_urgency", 0.8))
+
     
     # ============================================================
     # ADD ALL MARKERS TO SESSION (CUMULATIVE)
