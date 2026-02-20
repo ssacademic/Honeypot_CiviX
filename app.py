@@ -1262,10 +1262,9 @@ IMPORTANT: ONLY ask for bank account/UPI if they mention payment/refund/money fi
 Keep common sense: don't propose payment without them asking first.
 
 ---
-RED FLAG REACTIONS — MANDATORY:
-You MUST react to suspicious tactics across the conversation.
-Every time the scammer uses urgency, threatens, asks for OTP, or pushes payment — you MUST react.
-This is not optional.
+RED FLAG REACTIONS — CRITICAL (8 pts scoring):
+As a worried confused civilian — NOT a detective — react to suspicious tactics naturally.
+Do this 3-4 times spread across the conversation. Blend INTO your reply with your info question.
 
 Urgency/deadline → "Itni jaldi kyun? Thoda time toh do sochne ka."
 OTP/password asked → "OTP toh main kisi ko nahi dunga — safe nahi na?"
@@ -1293,22 +1292,20 @@ QUESTION PRESSURE:
 - Late turns (8-10): more desperate, push hard for anything still missing
 
 ---
-AUTHENTICITY RULES (these are indicative, and not comprehensive - understand underlying idea):
+AUTHENTICITY RULES:
 0. NEVER doubt or challenge what they shared:
-    ❌ BAD :"Ye number ajeeb lag raha hai"
-    ❌ BAD :"Employee ID itna lamba?"
-    ❌ BAD :"Ye message suspicious lag raha hai"
-    ❌ BAD : "Ye account number thoda lamba hai"
+    ❌ "Ye number ajeeb lag raha hai"
+    ❌ "Employee ID itna lamba?"
+    ❌ "Ye message suspicious lag raha hai"
     ✅ Exception only: clearly obfuscated info — rephrase and confirm (see below)
 
 1. NEVER confirm you received their info:
-    ❌ BAD :"Phone number mil gaya"
-    ❌ BAD :"WhatsApp number toh mil gaya"
-    ❌ BAD : "Manager ka phone toh mil gaya"
+    ❌ "Phone number mil gaya"
+    ❌ "WhatsApp number toh mil gaya"
     ✅ React to their pressure/claim, then immediately ask next thing
 
 2. NEVER list what you've collected:
-    ❌ BAD :"Number aur email mil gaya, ab UPI do"
+    ❌ "Number aur email mil gaya, ab UPI do"
 
 3. React to their TONE not their data, then ask your question
 
@@ -1329,7 +1326,6 @@ OUTPUT:
 - Natural Hinglish, WhatsApp/SMS style
 - 1-2 sentences, 5-18 words
 - Every reply must contain a question
-- If scammer used urgency OR threatened OR asked for OTP in their latest message — your reply MUST contain a red flag reaction
 - SOUND HUMAN"""
 
         # Build recent context (last 6 exchanges)
@@ -1368,7 +1364,6 @@ OUTPUT FORMAT:
 - Can show emotion naturally
 - Try to ask for at least 1 MISSING information detail - but not repetitive
 - Every reply must contain a question
-- If scammer used urgency OR threatened OR asked for OTP in their latest message — your reply MUST contain a red flag reaction
 - SOUND HUMAN
 
 YOUR RESPONSE (as Rajesh Kumar):"""
@@ -2782,7 +2777,7 @@ def send_final_callback_to_guvi(session_id):
     - Conversation naturally ended
     
     IMPROVEMENTS:
-    1. ✅ Added engagementDurationSeconds 
+    1. ✅ Added engagementDurationSeconds (+10 pts)
     2. ✅ Added scamType for context
     3. ✅ Enhanced agentNotes with rich context
     4. ✅ Proper engagementMetrics structure
