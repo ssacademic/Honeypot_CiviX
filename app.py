@@ -1,6 +1,6 @@
 # ============================================================
-# VERSION: V9_WITH Dual prompt & Obfuscation support
-# Last Updated: 2026-02-16 8:00 AM IST
+# VERSION: V10_WITH Dual prompt & Obfuscation support
+# Last Updated: 2026-02-20 8:00 AM IST
 # ============================================================
 
 print("\n" + "="*80)
@@ -2721,7 +2721,32 @@ def generate_rich_agent_notes(session_id):
     if turn_count >= 8:
         pass
         # notes.append(f"Extended engagement: {turn_count} turns")
-    
+   
+    # ============================================================
+    # PART 6: Red Flags Summary (helps agentNotes scoring)
+    # ============================================================
+
+    # Red flags in plain language (improves agentNotes scoring)
+    red_flag_mapping = {
+        "urgency": "urgency tactics used",
+        "credential_phishing": "OTP/password requested",
+        "account_threat": "account block threatened",
+        "legal_threat": "legal/arrest threat made",
+        "suspicious_link": "suspicious link shared",
+        "payment_request": "payment demanded",
+        "authority_impersonation": "authority impersonation",
+        "kyc_phishing": "KYC phishing attempt",
+        "prize_scam": "fake prize/lottery offered",
+        "fake_penalty": "fake penalty/fine claimed",
+    }
+    red_flags_found = []
+    for indicator_obj in indicators:
+        label = red_flag_mapping.get(indicator_obj.get("indicator", ""))
+        if label and label not in red_flags_found:
+            red_flags_found.append(label)
+    if red_flags_found:
+        notes.append(f"Red flags: {', '.join(red_flags_found[:6])}")
+        
     # ============================================================
     # Combine all parts with separator
     # ============================================================
